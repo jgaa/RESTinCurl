@@ -16,8 +16,8 @@ This is a very simple library that use the C library libcurl to perform HTTP cli
 ## Todo's
 
 - [ ] Ensure thread safety with OpenSSL
-- [v] Set up a shared worker-thread
-- [v] Add a queue to add requests
+- [x] Set up a shared worker-thread
+- [x] Add a queue to add requests
 - [ ] Add a pipe to signal the worker-thread via select()
 - [ ] Make some sort of timer, so that we clean up and stop the thread after #time
 - [ ] Set default timeout on requests
