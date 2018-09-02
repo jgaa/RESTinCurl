@@ -22,3 +22,9 @@ target_link_libraries(general_tests
 )
 add_dependencies(general_tests externalLest)
 ADD_AND_RUN_UNITTEST(GENERAL_TESTS general_tests)
+
+add_executable(app_test app_test.cpp)
+target_link_libraries(app_test
+    ${DEFAULT_LIBRARIES}
+)
+ADD_AND_RUN_UNITTEST(APP_TEST app_test)

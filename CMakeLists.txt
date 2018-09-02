@@ -13,7 +13,7 @@ find_package(CURL REQUIRED)
 
 message(STATUS "Curl library: ${CURL_LIBRARIES}")
 
-set(DEFAULT_LIBRARIES ${CURL_LIBRARIES})
+set(DEFAULT_LIBRARIES ${CURL_LIBRARIES} pthread)
 
 include_directories(
     ${CURL_INCLUDE_DIRS}

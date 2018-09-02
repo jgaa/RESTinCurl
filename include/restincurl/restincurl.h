@@ -10,60 +10,31 @@
 #include <deque>
 #include <iterator>
 #include <iostream>
+#include <mutex>
+#include <map>
+#include <atomic>
 
 #include <assert.h>
+#include <sys/select.h>
+#include <sys/time.h>
 
 #include <curl/curl.h>
 #include <curl/easy.h>
 
-/*
- * easy init: easyhandle = curl_easy_init();
- * curl_easy_setopt(handle, CURLOPT_URL, "http://domain.com/");
- * write callback:  size_t write_data(void *buffer, size_t size, size_t nmemb, void *userp); (return size)
- * curl_easy_setopt(easyhandle, CURLOPT_WRITEFUNCTION, write_data);
- *  curl_easy_setopt(easyhandle, CURLOPT_WRITEDATA, &internal_struct);  (pointer to userp)
- * execute: success = curl_easy_perform(easyhandle);
- *  curl_easy_cleanup
- *
- *  read cb:  size_t function(char *bufptr, size_t size, size_t nitems, void *userp);
- *  curl_easy_setopt(easyhandle, CURLOPT_READFUNCTION, read_function);
- *  curl_easy_setopt(easyhandle, CURLOPT_READDATA, &filedata);
- *  Tell libcurl that we want to upload:
- *  curl_easy_setopt(easyhandle, CURLOPT_UPLOAD, 1L);
- *
- * auth:
- *  curl_easy_setopt(easyhandle, CURLOPT_USERPWD, "myname:thesecret");
- *  curl_easy_setopt(easyhandle, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
- *
- *  CURLOPT_ERRORBUFFER to point libcurl to a buffer of yours where it'll store a human readable error message as well
- *  set the CURLOPT_VERBOSE option to 1. It'll cause the library to spew out the entire protocol details it sends
- *  Include headers in the normal body output with CURLOPT_HEADER set 1
- *
- * progress:
- * Switch on the progress meter by, oddly enough, setting CURLOPT_NOPROGRESS to zero. This option is set to 1 by default.
- * using CURLOPT_PROGRESSFUNCTION.
- * int progress_callback(void *clientp,
- *                      double dltotal,
- *                      double dlnow,
- *                      double ultotal,
- *                      double ulnow);
- *
- * struct curl_slist *headers=NULL;  init to NULL is important
-    headers = curl_slist_append(headers, "Hey-server-hey: how are you?");
-    headers = curl_slist_append(headers, "X-silly-content: yes");
 
-    pass our list of custom made headers
-    curl_easy_setopt(easyhandle, CURLOPT_HTTPHEADER, headers);
+// Max concurrent connections
+#ifndef RESTINCURL_MAX_CONNECTIONS
+#   define RESTINCURL_MAX_CONNECTIONS 32L
+#endif
 
-    delete header: headers = curl_slist_append(headers, "Accept:");
-
-     curl_slist_free_all(headers);  free the header list
-
-     By making sure a request uses the custom header "Transfer-Encoding: chunked" when doing a non-GET HTTP operation, libcurl will switch over to "chunked" upload
- */
+#ifndef RESTINCURL_ENABLE_ASYNC
+#   define RESTINCURL_ENABLE_ASYNC 1
+#endif
 
 
 namespace restincurl {
+
+    using lock_t = std::lock_guard<std::mutex>;
 
     enum class RequestType { GET, PUT, POST, HEAD, DELETE, PATCH, OPTIONS, INVALID };
     using completion_fn_t = std::function<void (CURLcode result)>;
@@ -80,10 +51,15 @@ namespace restincurl {
             , err_{err}
             {}
 
-        CURLcode getErrorCode() const noexcept { return err_; }
+         CurlException(const std::string msg, const CURLMcode err)
+            : Exception(msg + '(' + std::to_string(err) + "): " + curl_multi_strerror(err))
+            , err_{err}
+            {}
+
+        int getErrorCode() const noexcept { err_; }
 
     private:
-        const CURLcode err_;
+        const int err_;
     };
 
     class EasyHandle {
@@ -93,15 +69,22 @@ namespace restincurl {
 
         EasyHandle()
         {
+            std::clog << "EasyHandle created: " << handle_ << std::endl;
         }
 
         ~EasyHandle() {
+            Close();
+        }
+
+        void Close() {
             if (handle_) {
+                std::clog << "Cleaning easy-handle " << handle_ << std::endl;
                 curl_easy_cleanup(handle_);
+                handle_ = nullptr;
             }
         }
 
-        operator handle_t () { return handle_; }
+        operator handle_t () const noexcept { return handle_; }
 
     private:
         handle_t handle_ = curl_easy_init();
@@ -129,9 +112,15 @@ namespace restincurl {
         EasyHandle& eh_;
     };
 
+    struct DataHandlerBase {
+        virtual ~DataHandlerBase() = default;
+    };
+
     template <typename T>
-    struct InDataHandler {
-        InDataHandler(T& data) : data_{data} {}
+    struct InDataHandler : public DataHandlerBase{
+        InDataHandler(T& data) : data_{data} {
+            std::clog << "InDataHandler address: " << this << std::endl;
+        }
 
         static size_t write_callback(char *ptr, size_t size, size_t nitems, void *userdata) {
             assert(userdata);
@@ -147,7 +136,7 @@ namespace restincurl {
     };
 
     template <typename T>
-    struct OutDataHandler {
+    struct OutDataHandler : public DataHandlerBase {
         OutDataHandler() = default;
         OutDataHandler(const T& v) : data_{v} {}
         OutDataHandler(T&& v) : data_{std::move(v)} {}
@@ -170,6 +159,7 @@ namespace restincurl {
 
     class Request {
     public:
+        using ptr_t = std::unique_ptr<Request>;
 
         Request()
         : eh_{std::make_unique<EasyHandle>()}
@@ -182,22 +172,46 @@ namespace restincurl {
         }
 
         ~Request() {
+            if (headers_) {
+                curl_slist_free_all(headers_);
+            }
         }
 
-        void Prepare(const RequestType rq) {
+        void Prepare(const RequestType rq, completion_fn_t completion) {
             request_type_ = rq;;
             SetRequestType();
+            completion_ = std::move(completion);
         }
 
-        void Execute(completion_fn_t fn) {
+        // Synchronous execution.
+        void Execute() {
             const auto result = curl_easy_perform(*eh_);
-            if (fn) {
-                fn(result);
+            if (completion_) {
+                completion_(result);
+            }
+        }
+
+        void Complete(CURLcode cc, const CURLMSG& /*msg*/) {
+            if (completion_) {
+                completion_(cc);
             }
         }
 
         EasyHandle& GetEasyHandle() noexcept { assert(eh_); return *eh_; }
         RequestType GetRequestType() noexcept { return request_type_; }
+
+        void SetDefaultInHandler(std::unique_ptr<DataHandlerBase> ptr) {
+            default_in_handler_ = std::move(ptr);
+        }
+
+        void SetDefaultOutHandler(std::unique_ptr<DataHandlerBase> ptr) {
+            default_out_handler_ = std::move(ptr);
+        }
+
+        using headers_t = curl_slist *;
+        headers_t& GetHeaders() {
+            return headers_;
+        }
 
     private:
         void SetRequestType() {
@@ -230,32 +244,212 @@ namespace restincurl {
 
         EasyHandle::ptr_t eh_;
         RequestType request_type_ = RequestType::INVALID;
+        completion_fn_t completion_;
+        std::unique_ptr<DataHandlerBase> default_out_handler_;
+        std::unique_ptr<DataHandlerBase> default_in_handler_;
+        headers_t headers_ = nullptr;
     };
+
+#if RESTINCURL_ENABLE_ASYNC
+    class Worker {
+    public:
+        Worker()
+        : thread_{[&] {
+            try {
+                std::clog << "Starting thread " << std::this_thread::get_id() << std::endl;
+                Init();
+                Run();
+                Clean();
+            } catch (const std::exception& ex) {
+                std::clog << "Worker: " << ex.what();
+            }
+            std::clog << "Exiting thread " << std::this_thread::get_id() << std::endl;
+        }} {}
+
+        ~Worker() {
+            if (thread_.joinable()) {
+                thread_.detach();
+            }
+        }
+
+        static std::unique_ptr<Worker> Create() {
+            return std::make_unique<Worker>();
+        }
+
+        void Enqueue(Request::ptr_t req) {
+            std::clog << "Queuing request " << std::endl;
+            lock_t lock(mutex_);
+            queue_.push_back(std::move(req));
+            Signal();
+        }
+
+        void Join() const {
+            std::call_once(joined_, [this] {
+                const_cast<Worker *>(this)->thread_.join();
+            });
+        }
+
+        // Let the current transfers complete, then quit
+        void CloseWhenFinished() {
+            close_pending_ = true;
+        }
+
+        // Shut down now. Abort all transfers
+        void Close() {
+            abort_ = true;
+            Signal();
+        }
+
+        // Check if the run loop has finished.
+        bool IsDone() const {
+            return done_;
+        }
+
+    private:
+        void Signal() {
+            //TODO: Implement
+        }
+
+        void Dequeue() {
+            lock_t lock(mutex_);
+
+            for(auto& req: queue_) {
+                assert(req);
+                const auto& eh = req->GetEasyHandle();
+                std::clog << "Adding request: " << eh << std::endl;
+                ongoing_[eh] = std::move(req);
+                const auto mc = curl_multi_add_handle(handle_, eh);
+                if (mc != CURLM_OK) {
+                    throw CurlException("curl_multi_add_handle", mc);
+                }
+            }
+
+            queue_.clear();
+        }
+
+        void Init() {
+            if ((handle_ = curl_multi_init()) == nullptr) {
+                throw std::runtime_error("curl_multi_init() failed");
+            }
+
+            curl_multi_setopt(handle_, CURLMOPT_MAXCONNECTS, RESTINCURL_MAX_CONNECTIONS);
+        }
+
+        void Clean() {
+            if (handle_) {
+                std::clog << "Calling curl_multi_cleanup: " << handle_ << std::endl;
+                curl_multi_cleanup(handle_);
+                handle_ = nullptr;
+            }
+        }
+
+        void Run() {
+            int transfers_running = -1;
+            fd_set fdread = {};
+            fd_set fdwrite = {};
+            fd_set fdexcep = {};
+
+            while (!abort_ && (transfers_running || !close_pending_)) {
+                Dequeue();
+
+                 /* timeout or readable/writable sockets */
+                curl_multi_perform(handle_, &transfers_running);
+
+                int numLeft = {};
+                while (auto m = curl_multi_info_read(handle_, &numLeft)) {
+                    assert(m);
+                    auto it = ongoing_.find(m->easy_handle);
+                    if (it != ongoing_.end()) {
+                        std::clog << "Finishing request with easy-handle: "
+                            << (EasyHandle::handle_t)it->second->GetEasyHandle() << std::endl;
+                        try {
+                            it->second->Complete(m->data.result, m->msg);
+                        } catch(const std::exception& ex) {
+                            std::clog << "Complete threw: " << ex.what() << std::endl;
+                        }
+                        if (m->msg == CURLMSG_DONE) {
+                            curl_multi_remove_handle(handle_, m->easy_handle);
+                        }
+                        it->second->GetEasyHandle().Close();
+                        ongoing_.erase(it);
+                    } else {
+                        std::clog << "Failed to find easy_handle in ongoing!" << std::endl;
+                        assert(false);
+                    }
+                }
+
+                int maxfd = -1;
+
+                long timeout;
+                /* extract timeout value */
+
+                curl_multi_timeout(handle_, &timeout);
+                if (timeout < 0) {
+                    timeout = 1000;
+                }
+
+                struct timeval tv = {};
+                tv.tv_sec = timeout / 1000;
+                tv.tv_usec = (timeout % 1000) * 1000;
+
+                FD_ZERO(&fdread);
+                FD_ZERO(&fdwrite);
+                FD_ZERO(&fdexcep);
+
+                /* get file descriptors from the transfers */
+                const auto mc = curl_multi_fdset(handle_, &fdread, &fdwrite, &fdexcep, &maxfd);
+                if (mc != CURLM_OK) {
+                    throw CurlException("curl_multi_fdset", mc);
+                }
+                if (maxfd == -1) {
+                    // TODO: Remove when we have pipe
+                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                } else {
+                    select(maxfd+1, &fdread, &fdwrite, &fdexcep, &tv);
+                }
+            }
+
+            done_ = true;
+        }
+
+        std::atomic_bool close_pending_ {false};
+        std::atomic_bool abort_ {false};
+        std::atomic_bool done_ {false};
+        decltype(curl_multi_init()) handle_ = {};
+        std::mutex mutex_;
+        std::thread thread_;
+        std::deque<Request::ptr_t> queue_;
+        std::map<EasyHandle::handle_t, Request::ptr_t> ongoing_;
+        mutable std::once_flag joined_;
+    };
+#endif // RESTINCURL_ENABLE_ASYNC
 
     // Convenience interface
     // We can use different containers for default data handling, but for
     // json, strings are usually OK. We can still call SendData<>() and StoreData<>()
     // with different template parameters, or even set our own Curl compatible
     // read / write handlers.
-    template <typename inT = std::string, typename outT = std::string>
     class RequestBuilder {
         // noop handler for incoming data
         static size_t write_callback(char *ptr, size_t size, size_t nitems, void *userdata) {
-            assert(userdata == nullptr);
             const auto bytes = size * nitems;
             return bytes;
         }
     public:
         using ptr_t = std::unique_ptr<RequestBuilder>;
-        RequestBuilder()
+        RequestBuilder(
+#if RESTINCURL_ENABLE_ASYNC
+            Worker& worker
+#endif
+        )
         : request_{std::make_unique<Request>()}
         , options_{std::make_unique<Options>(request_->GetEasyHandle())}
+#if RESTINCURL_ENABLE_ASYNC
+        , worker_(worker)
+#endif
         {}
 
         ~RequestBuilder() {
-            if (headers_) {
-                curl_slist_free_all(headers_);
-            }
         }
 
     protected:
@@ -291,7 +485,7 @@ namespace restincurl {
         RequestBuilder& Header(const char *value) {
             assert(value);
             assert(!is_built_);
-            headers_ = curl_slist_append(headers_, value);
+            request_->GetHeaders() = curl_slist_append(request_->GetHeaders(), value);
             return *this;
         }
 
@@ -323,12 +517,16 @@ namespace restincurl {
             options_->Set(CURLOPT_READFUNCTION, dh.read_callback);
             options_->Set(CURLOPT_READDATA, &dh);
             have_data_out_ = true;
+            return *this;
         }
 
-        RequestBuilder& SendData(inT data) {
+        template <typename T>
+        RequestBuilder& SendData(T data) {
             assert(!is_built_);
-            default_out_handler_ = std::make_unique<OutDataHandler<outT>>(std::move(data));
-            return SendData(*default_out_handler_);
+            auto handler = std::make_unique<OutDataHandler<T>>(std::move(data));
+            auto& handler_ref = *handler;
+            request_->SetDefaultOutHandler(std::move(handler));
+            return SendData(handler_ref);
         }
 
         // Incoming data
@@ -338,13 +536,17 @@ namespace restincurl {
             options_->Set(CURLOPT_WRITEFUNCTION, dh.write_callback);
             options_->Set(CURLOPT_WRITEDATA, &dh);
             have_data_in_ = true;
+            return *this;
         }
 
         // Store data in the provided string. It must exist until the transfer is complete.
-        RequestBuilder& StoreData(inT& data) {
+        template <typename T>
+        RequestBuilder& StoreData(T& data) {
             assert(!is_built_);
-            default_in_handler_ = std::make_unique<InDataHandler<inT>>(data);
-            return StoreData(*default_in_handler_);
+            auto handler = std::make_unique<InDataHandler<T>>(data);
+            auto& handler_ref = *handler;
+            request_->SetDefaultInHandler(std::move(handler));
+            return StoreData(handler_ref);
         }
 
         RequestBuilder& WithCompletion(completion_fn_t fn) {
@@ -355,9 +557,10 @@ namespace restincurl {
 
         // Set Curl compatible read handler. You will probably don't need this.
         RequestBuilder& SetReadHandler(size_t (*handler)(char *, size_t , size_t , void *), void *userdata) {
-            options_->Set(CURLOPT_READFUNCTION,handler);
+            options_->Set(CURLOPT_READFUNCTION, handler);
             options_->Set(CURLOPT_READDATA, userdata);
             have_data_out_ = true;
+            return *this;
         }
 
         // Set Curl compatible write handler. You will probably don't need this.
@@ -365,6 +568,7 @@ namespace restincurl {
             options_->Set(CURLOPT_WRITEFUNCTION,handler);
             options_->Set(CURLOPT_WRITEDATA, userdata);
             have_data_in_ = true;
+            return *this;
         }
 
         void Build() {
@@ -379,55 +583,99 @@ namespace restincurl {
                 }
 
                 // Set headers
-                if (headers_) {
-                    options_->Set(CURLOPT_HTTPHEADER, headers_);
+                if (request_->GetHeaders()) {
+                    options_->Set(CURLOPT_HTTPHEADER, request_->GetHeaders());
                 }
 
                 // TODO: Set up timeout
-                // TODO: Set up progress callback
-                // TODO: Prepare the final url (we want nice request arguments)
+                // TODO: Prepare the final url (we want nice, correctly encoded request arguments)
                 options_->Set(CURLOPT_URL, url_);
 
                 // Prepare request
-                request_->Prepare(request_type_);
+                request_->Prepare(request_type_, std::move(completion_));
                 is_built_ = true;
             }
         }
 
+        void ExecuteSynchronous() {
+            Build();
+            request_->Execute();
+        }
+
+#if RESTINCURL_ENABLE_ASYNC
         void Execute() {
             Build();
-
-            // Execute curl request
-            request_->Execute(std::move(completion_));
+            worker_.Enqueue(std::move(request_));
         }
+#endif
 
     private:
         std::unique_ptr<Request> request_;
         std::unique_ptr<Options> options_;
         std::string url_;
         RequestType request_type_ = RequestType::INVALID;
-        curl_slist *headers_ = nullptr;
         bool have_data_in_ = false;
         bool have_data_out_ = false;
         bool is_built_ = false;
-        std::unique_ptr<OutDataHandler<outT>> default_out_handler_;
-        std::unique_ptr<InDataHandler<inT>> default_in_handler_;
         completion_fn_t completion_;
+#if RESTINCURL_ENABLE_ASYNC
+        Worker& worker_;
+#endif
     };
 
+
     class Client {
+
     public:
-        Client() {
+        // Set init to false if curl is already initialized by unrelated code
+        Client(const bool init = true) {
+            if (init) {
+                static std::once_flag flag;
+                std::call_once(flag, [] {
+                    std::clog << "One time initialization of curl." << std::endl;
+                    curl_global_init(CURL_GLOBAL_DEFAULT);
+                });
+            }
         }
 
         virtual ~Client() {
-
+#if RESTINCURL_ENABLE_ASYNC
+            if (worker_) {
+                try {
+                    worker_->Close();
+                } catch (const std::exception& ex) {
+                    std::clog << "~Client(): " << ex.what() << std::endl;
+                }
+            }
+#endif
         }
 
-        template<typename inT = std::string, typename outT = std::string>
-        std::unique_ptr<RequestBuilder<inT, outT>> Build() {
-            return std::make_unique<RequestBuilder<inT, outT>>();
+        std::unique_ptr<RequestBuilder> Build() {
+            return std::make_unique<RequestBuilder>(
+#if RESTINCURL_ENABLE_ASYNC
+                *worker_
+#endif
+            );
         }
+
+#if RESTINCURL_ENABLE_ASYNC
+        void CloseWhenFinished() {
+            worker_->CloseWhenFinished();
+        }
+
+        void Close() {
+            worker_->Close();
+        }
+
+        void WaitForFinish() {
+            worker_->Join();
+        }
+#endif
+
+    private:
+#if RESTINCURL_ENABLE_ASYNC
+        std::unique_ptr<Worker> worker_ = std::make_unique<Worker>();
+#endif
     };
 
 

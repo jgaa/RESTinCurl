@@ -12,3 +12,16 @@ This is a very simple library that use the C library libcurl to perform HTTP cli
 - The library must use resources in a sane way, and silently shut down the worker thread and curl connection pool when it has been idle for a while.
 
 
+
+## Todo's
+
+- [ ] Ensure thread safety with OpenSSL
+- [v] Set up a shared worker-thread
+- [v] Add a queue to add requests
+- [ ] Add a pipe to signal the worker-thread via select()
+- [ ] Make some sort of timer, so that we clean up and stop the thread after #time
+- [ ] Set default timeout on requests
+- [ ] Test on IOS
+- [ ] Test on Android
+- [ ] How does libraries usually shut down on ios and Android when the app is killed?
+- [ ] Make sure connection re-use it utilized
