@@ -1,6 +1,4 @@
 
-#include <future>
-
 #define RESTINCURL_ENABLE_ASYNC 1
 
 #include "restincurl/restincurl.h"
@@ -30,8 +28,6 @@ STARTCASE(TestSimpleGet)
 
     restincurl::InDataHandler<std::string> data_handler(data);
 
-    std::promise<void> promise;
-    auto future = promise.get_future();
     bool callback_called = false;
     client.Build()->Get("http://localhost:3001/normal/manyposts")
         //.Option(CURLOPT_VERBOSE, 1L)
@@ -42,12 +38,10 @@ STARTCASE(TestSimpleGet)
         .WithCompletion([&](auto result) {
             EXPECT(result == CURLE_OK);
             EXPECT(!data.empty());
-            promise.set_value();
             callback_called = true;
         })
         .Execute();
 
-    future.get();
 #if RESTINCURL_ENABLE_ASYNC
     client.CloseWhenFinished();
     client.WaitForFinish();
@@ -64,8 +58,6 @@ STARTCASE(TestSimpleGetWithHttps)
 
     restincurl::InDataHandler<std::string> data_handler(data);
 
-    std::promise<void> promise;
-    auto future = promise.get_future();
     bool callback_called = false;
     client.Build()->Get("https://google.com")
         //.Option(CURLOPT_VERBOSE, 1L)
@@ -76,12 +68,10 @@ STARTCASE(TestSimpleGetWithHttps)
         .WithCompletion([&](auto result) {
             EXPECT(result == CURLE_OK);
             EXPECT(!data.empty());
-            promise.set_value();
             callback_called = true;
         })
         .Execute();
 
-    future.get();
 #if RESTINCURL_ENABLE_ASYNC
     client.CloseWhenFinished();
     client.WaitForFinish();

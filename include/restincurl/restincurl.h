@@ -352,8 +352,12 @@ namespace restincurl {
             while (!abort_ && (transfers_running || !close_pending_)) {
                 Dequeue();
 
-                 /* timeout or readable/writable sockets */
+                /* timeout or readable/writable sockets */
+                const bool initial_ideling = transfers_running == -1;
                 curl_multi_perform(handle_, &transfers_running);
+                if ((transfers_running == 0) && initial_ideling) {
+                    transfers_running = -1; // Let's ignore close_pending_ until we have seen a request
+                }
 
                 int numLeft = {};
                 while (auto m = curl_multi_info_read(handle_, &numLeft)) {
