@@ -25,3 +25,4 @@ This is a very simple library that use the C library libcurl to perform HTTP cli
 - [ ] Test on Android
 - [ ] How does libraries usually shut down on ios and Android when the app is killed?
 - [ ] Make sure connection re-use it utilized
+- [ ] Queue new requests if we reach RESTINCURL_MAX_CONNECTIONS concurrent connections
