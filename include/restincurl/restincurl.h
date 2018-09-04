@@ -270,11 +270,7 @@ namespace restincurl {
                                &result.http_response_code);
             RESTINCURL_LOG("Complete: http code: " << result.http_response_code);
             if (completion_) {
-                try {
-                    completion_(result);
-                } catch(const std::exception& ex) {
-                    RESTINCURL_LOG("completion failed: " << ex.what());
-                }
+                completion_(result);
             }
         }
 
