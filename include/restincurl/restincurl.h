@@ -41,12 +41,13 @@
 #include <vector>
 
 #include <assert.h>
-#include <sys/select.h>
-#include <sys/time.h>
-
 #include <curl/curl.h>
 #include <curl/easy.h>
-
+#include <string.h>
+#include <sys/select.h>
+#include <sys/time.h>
+#include <unistd.h>
+#include <fcntl.h>
 
 // Max concurrent connections
 #ifndef RESTINCURL_MAX_CONNECTIONS
@@ -57,17 +58,44 @@
 #   define RESTINCURL_ENABLE_ASYNC 1
 #endif
 
+#ifndef RESTINCURL_ENABLE_DEFAULT_LOGGER
+#   define RESTINCURL_ENABLE_DEFAULT_LOGGER 0
+#endif
+
+#ifndef RESTINCURL_LOG
+#   if RESTINCURL_ENABLE_DEFAULT_LOGGER
+#       define RESTINCURL_LOG(msg) std::clog << msg << std::endl
+#   else
+#       define RESTINCURL_LOG(msg)
+#   endif
+#endif
+
 
 namespace restincurl {
 
     using lock_t = std::lock_guard<std::mutex>;
 
+    struct Result {
+        CURLcode curl_code = {};
+        long http_response_code = {};
+    };
+
     enum class RequestType { GET, PUT, POST, HEAD, DELETE, PATCH, OPTIONS, INVALID };
-    using completion_fn_t = std::function<void (CURLcode result)>;
+    using completion_fn_t = std::function<void (const Result& result)>;
 
     class Exception : public std::runtime_error {
     public:
         Exception(const std::string& msg) : runtime_error(msg) {}
+    };
+
+    class SystemException : public Exception {
+    public:
+        SystemException(const std::string& msg, const int e) : Exception(msg + " " + strerror(e)), err_{e} {}
+
+        int getErrorCode() const noexcept { return err_; }
+
+    private:
+        const int err_;
     };
 
     class CurlException : public Exception {
@@ -82,7 +110,7 @@ namespace restincurl {
             , err_{err}
             {}
 
-        int getErrorCode() const noexcept { err_; }
+        int getErrorCode() const noexcept { return err_; }
 
     private:
         const int err_;
@@ -93,9 +121,8 @@ namespace restincurl {
         using ptr_t = std::unique_ptr<EasyHandle>;
         using handle_t = decltype(curl_easy_init());
 
-        EasyHandle()
-        {
-            std::clog << "EasyHandle created: " << handle_ << std::endl;
+        EasyHandle() {
+            RESTINCURL_LOG("EasyHandle created: " << handle_);
         }
 
         ~EasyHandle() {
@@ -104,7 +131,7 @@ namespace restincurl {
 
         void Close() {
             if (handle_) {
-                std::clog << "Cleaning easy-handle " << handle_ << std::endl;
+                RESTINCURL_LOG("Cleaning easy-handle " << handle_);
                 curl_easy_cleanup(handle_);
                 handle_ = nullptr;
             }
@@ -145,7 +172,7 @@ namespace restincurl {
     template <typename T>
     struct InDataHandler : public DataHandlerBase{
         InDataHandler(T& data) : data_{data} {
-            std::clog << "InDataHandler address: " << this << std::endl;
+            RESTINCURL_LOG("InDataHandler address: " << this);
         }
 
         static size_t write_callback(char *ptr, size_t size, size_t nitems, void *userdata) {
@@ -204,7 +231,7 @@ namespace restincurl {
         }
 
         void Prepare(const RequestType rq, completion_fn_t completion) {
-            request_type_ = rq;;
+            request_type_ = rq;
             SetRequestType();
             completion_ = std::move(completion);
         }
@@ -212,15 +239,11 @@ namespace restincurl {
         // Synchronous execution.
         void Execute() {
             const auto result = curl_easy_perform(*eh_);
-            if (completion_) {
-                completion_(result);
-            }
+            CallCompletion(result);
         }
 
         void Complete(CURLcode cc, const CURLMSG& /*msg*/) {
-            if (completion_) {
-                completion_(cc);
-            }
+            CallCompletion(cc);
         }
 
         EasyHandle& GetEasyHandle() noexcept { assert(eh_); return *eh_; }
@@ -240,6 +263,21 @@ namespace restincurl {
         }
 
     private:
+        void CallCompletion(CURLcode cc) {
+            Result result;
+            result.curl_code = cc;
+            curl_easy_getinfo (*eh_, CURLINFO_RESPONSE_CODE,
+                               &result.http_response_code);
+            RESTINCURL_LOG("Complete: http code: " << result.http_response_code);
+            if (completion_) {
+                try {
+                    completion_(result);
+                } catch(const std::exception& ex) {
+                    RESTINCURL_LOG("completion failed: " << ex.what());
+                }
+            }
+        }
+
         void SetRequestType() {
             switch(request_type_) {
                 case RequestType::GET:
@@ -277,19 +315,70 @@ namespace restincurl {
     };
 
 #if RESTINCURL_ENABLE_ASYNC
+
+    class Signaler {
+        enum FdUsage { FD_READ = 0, FD_WRITE = 1};
+
+    public:
+        using pipefd_t = std::array<int, 2>;
+
+        Signaler() {
+            auto status = pipe(pipefd_.data());
+            if (status) {
+                throw SystemException("pipe", status);
+            }
+            for(auto fd : pipefd_) {
+                int flags = 0;
+                if (-1 == (flags = fcntl(fd, F_GETFL, 0)))
+                    flags = 0;
+                fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+            }
+        }
+
+        ~Signaler() {
+            for(auto fd : pipefd_) {
+                close(fd);
+            }
+        }
+
+        void Signal() {
+            char byte = {};
+            RESTINCURL_LOG("Signal: Signaling!");
+            if (write(pipefd_[FD_WRITE], &byte, 1) != 1) {
+                throw SystemException("write pipe", errno);
+            }
+        }
+
+        int GetReadFd() { return pipefd_[FD_READ]; }
+
+        bool WasSignalled() {
+            bool rval = false;
+            char byte = {};
+            while(read(pipefd_[FD_READ], &byte, 1) > 0) {
+                RESTINCURL_LOG("Signal: Was signalled");
+                rval = true;
+            }
+
+            return rval;
+        }
+
+    private:
+        pipefd_t pipefd_;
+    };
+
     class Worker {
     public:
         Worker()
         : thread_{[&] {
             try {
-                std::clog << "Starting thread " << std::this_thread::get_id() << std::endl;
+                RESTINCURL_LOG("Starting thread " << std::this_thread::get_id());
                 Init();
                 Run();
                 Clean();
             } catch (const std::exception& ex) {
-                std::clog << "Worker: " << ex.what();
+                RESTINCURL_LOG("Worker: ");
             }
-            std::clog << "Exiting thread " << std::this_thread::get_id() << std::endl;
+            RESTINCURL_LOG("Exiting thread " << std::this_thread::get_id());
         }} {}
 
         ~Worker() {
@@ -303,7 +392,7 @@ namespace restincurl {
         }
 
         void Enqueue(Request::ptr_t req) {
-            std::clog << "Queuing request " << std::endl;
+            RESTINCURL_LOG("Queuing request ");
             lock_t lock(mutex_);
             queue_.push_back(std::move(req));
             Signal();
@@ -318,6 +407,7 @@ namespace restincurl {
         // Let the current transfers complete, then quit
         void CloseWhenFinished() {
             close_pending_ = true;
+            Signal();
         }
 
         // Shut down now. Abort all transfers
@@ -333,7 +423,7 @@ namespace restincurl {
 
     private:
         void Signal() {
-            //TODO: Implement
+            signal_.Signal();
         }
 
         void Dequeue() {
@@ -342,7 +432,7 @@ namespace restincurl {
             for(auto& req: queue_) {
                 assert(req);
                 const auto& eh = req->GetEasyHandle();
-                std::clog << "Adding request: " << eh << std::endl;
+                RESTINCURL_LOG("Adding request: " << eh);
                 ongoing_[eh] = std::move(req);
                 const auto mc = curl_multi_add_handle(handle_, eh);
                 if (mc != CURLM_OK) {
@@ -363,7 +453,7 @@ namespace restincurl {
 
         void Clean() {
             if (handle_) {
-                std::clog << "Calling curl_multi_cleanup: " << handle_ << std::endl;
+                RESTINCURL_LOG("Calling curl_multi_cleanup: " << handle_);
                 curl_multi_cleanup(handle_);
                 handle_ = nullptr;
             }
@@ -374,9 +464,19 @@ namespace restincurl {
             fd_set fdread = {};
             fd_set fdwrite = {};
             fd_set fdexcep = {};
+            bool do_dequeue = true;
 
             while (!abort_ && (transfers_running || !close_pending_)) {
-                Dequeue();
+
+                RESTINCURL_LOG("Run loop: transfers_running=" << transfers_running
+                     << ", do_dequeue=" << do_dequeue
+                     << ", close_pending_=" << close_pending_);
+
+
+                if (do_dequeue) {
+                    Dequeue();
+                    do_dequeue = false;
+                }
 
                 /* timeout or readable/writable sockets */
                 const bool initial_ideling = transfers_running == -1;
@@ -390,12 +490,12 @@ namespace restincurl {
                     assert(m);
                     auto it = ongoing_.find(m->easy_handle);
                     if (it != ongoing_.end()) {
-                        std::clog << "Finishing request with easy-handle: "
-                            << (EasyHandle::handle_t)it->second->GetEasyHandle() << std::endl;
+                        RESTINCURL_LOG("Finishing request with easy-handle: "
+                            << (EasyHandle::handle_t)it->second->GetEasyHandle());
                         try {
                             it->second->Complete(m->data.result, m->msg);
                         } catch(const std::exception& ex) {
-                            std::clog << "Complete threw: " << ex.what() << std::endl;
+                            RESTINCURL_LOG("Complete threw: " << ex.what());
                         }
                         if (m->msg == CURLMSG_DONE) {
                             curl_multi_remove_handle(handle_, m->easy_handle);
@@ -403,39 +503,62 @@ namespace restincurl {
                         it->second->GetEasyHandle().Close();
                         ongoing_.erase(it);
                     } else {
-                        std::clog << "Failed to find easy_handle in ongoing!" << std::endl;
+                        RESTINCURL_LOG("Failed to find easy_handle in ongoing!");
                         assert(false);
                     }
                 }
 
-                int maxfd = -1;
-
-                long timeout;
-                /* extract timeout value */
-
-                curl_multi_timeout(handle_, &timeout);
-                if (timeout < 0) {
-                    timeout = 1000;
+                // Avoid using select() as a timer when we need to exit anyway
+                if (abort_ || (!transfers_running && close_pending_)) {
+                    break;
                 }
 
-                struct timeval tv = {};
-                tv.tv_sec = timeout / 1000;
-                tv.tv_usec = (timeout % 1000) * 1000;
+                long timeout = 5000;
+                /* extract timeout value */
+
 
                 FD_ZERO(&fdread);
                 FD_ZERO(&fdwrite);
                 FD_ZERO(&fdexcep);
 
-                /* get file descriptors from the transfers */
-                const auto mc = curl_multi_fdset(handle_, &fdread, &fdwrite, &fdexcep, &maxfd);
-                if (mc != CURLM_OK) {
-                    throw CurlException("curl_multi_fdset", mc);
-                }
-                if (maxfd == -1) {
-                    // TODO: Remove when we have pipe
-                    std::this_thread::sleep_for(std::chrono::milliseconds(50));
-                } else {
-                    select(maxfd+1, &fdread, &fdwrite, &fdexcep, &tv);
+                int maxfd = -1;
+                if (transfers_running > 0) {
+                    curl_multi_timeout(handle_, &timeout);
+                    if (timeout < 0) {
+                        timeout = 1000;
+                    }
+
+                    /* get file descriptors from the transfers */
+                    const auto mc = curl_multi_fdset(handle_, &fdread, &fdwrite, &fdexcep, &maxfd);
+                    RESTINCURL_LOG("maxfd: " << maxfd);
+                    if (mc != CURLM_OK) {
+                        throw CurlException("curl_multi_fdset", mc);
+                    }
+
+                    if (maxfd == -1) {
+                        // Curl want's us to revisit soon
+                        timeout = 50;
+                    }
+                } // active transfers
+
+                struct timeval tv = {};
+                tv.tv_sec = timeout / 1000;
+                tv.tv_usec = (timeout % 1000) * 1000;
+
+                const auto signalfd = signal_.GetReadFd();
+
+                FD_SET(signalfd, &fdread);
+                maxfd = std::max(signalfd,  maxfd) + 1;
+
+                const auto rval = select(maxfd, &fdread, &fdwrite, &fdexcep, &tv);
+                RESTINCURL_LOG("select(" << maxfd << ") returned: " << rval);
+
+                if (rval > 0) {
+                    if (FD_ISSET(signalfd, &fdread)) {
+                        RESTINCURL_LOG("FD_ISSET was true: ");
+                        do_dequeue = signal_.WasSignalled();
+                    }
+
                 }
             }
 
@@ -451,6 +574,7 @@ namespace restincurl {
         std::deque<Request::ptr_t> queue_;
         std::map<EasyHandle::handle_t, Request::ptr_t> ongoing_;
         mutable std::once_flag joined_;
+        Signaler signal_;
     };
 #endif // RESTINCURL_ENABLE_ASYNC
 
@@ -662,7 +786,7 @@ namespace restincurl {
             if (init) {
                 static std::once_flag flag;
                 std::call_once(flag, [] {
-                    std::clog << "One time initialization of curl." << std::endl;
+                    RESTINCURL_LOG("One time initialization of curl.");
                     curl_global_init(CURL_GLOBAL_DEFAULT);
                 });
             }
@@ -674,7 +798,7 @@ namespace restincurl {
                 try {
                     worker_->Close();
                 } catch (const std::exception& ex) {
-                    std::clog << "~Client(): " << ex.what() << std::endl;
+                    RESTINCURL_LOG("~Client(): " << ex.what());
                 }
             }
 #endif

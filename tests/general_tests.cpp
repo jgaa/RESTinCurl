@@ -35,8 +35,9 @@ STARTCASE(TestSimpleGet)
         //.StoreData(data_handler)
         .StoreData(data)
         .Header("X-Client", "restincurl")
-        .WithCompletion([&](auto result) {
-            EXPECT(result == CURLE_OK);
+        .WithCompletion([&](const Result& result) {
+            EXPECT(result.curl_code == CURLE_OK);
+            EXPECT(result.http_response_code == 200);
             EXPECT(!data.empty());
             callback_called = true;
         })
@@ -65,9 +66,8 @@ STARTCASE(TestSimpleGetWithHttps)
         //.StoreData(data_handler)
         .StoreData(data)
         .Header("X-Client", "restincurl")
-        .WithCompletion([&](auto result) {
-            EXPECT(result == CURLE_OK);
-            EXPECT(!data.empty());
+        .WithCompletion([&](const Result& result) {
+            EXPECT(result.curl_code == CURLE_OK);
             callback_called = true;
         })
         .Execute();
