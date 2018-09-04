@@ -18,10 +18,10 @@ This is a very simple library that use the C library libcurl to perform HTTP cli
 - [ ] Ensure thread safety with OpenSSL
 - [x] Set up a shared worker-thread
 - [x] Add a queue to add requests
-- [ ] Add a pipe to signal the worker-thread via select()
+- [x] Add a pipe to signal the worker-thread via select()
 - [ ] Make some sort of timer, so that we clean up and stop the thread after #time
 - [ ] Set default timeout on requests
-- [ ] Test on IOS
+- [x] Test on IOS
 - [ ] Test on Android
 - [ ] How does libraries usually shut down on ios and Android when the app is killed?
 - [ ] Make sure connection re-use it utilized
