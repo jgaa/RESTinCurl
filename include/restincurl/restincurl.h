@@ -27,7 +27,6 @@
 */
 
 #include <atomic>
-#include <chrono>
 #include <deque>
 #include <exception>
 #include <functional>
@@ -198,11 +197,13 @@ namespace restincurl {
             assert(userdata);
             OutDataHandler *self = reinterpret_cast<OutDataHandler *>(userdata);
             const auto bytes = size * nitems;
-            auto out_bytes= std::min<size_t>(bytes, (self->data_.size() - self->sendt_bytes_));
+            auto out_bytes = std::min<size_t>(bytes, (self->data_.size() - self->sendt_bytes_));
             std::copy(self->data_.cbegin() + self->sendt_bytes_,
-                      self->data_.cbegin() + out_bytes,
+                      self->data_.cbegin() + (self->sendt_bytes_ + out_bytes),
                       bufptr);
             self->sendt_bytes_ += out_bytes;
+
+            RESTINCURL_LOG("Sent " << out_bytes << " of total " << self->data_.size() << " bytes.");
             return out_bytes;
         }
 
@@ -280,9 +281,12 @@ namespace restincurl {
                     curl_easy_setopt(*eh_, CURLOPT_HTTPGET, 1L);
                     break;
                 case RequestType::PUT:
-                    curl_easy_setopt(*eh_, CURLOPT_PUT, 1L);
+                    headers_ = curl_slist_append(headers_, "Transfer-Encoding: Chunked");
+                    curl_easy_setopt(*eh_, CURLOPT_UPLOAD, 1L);
                     break;
                 case RequestType::POST:
+                    headers_ = curl_slist_append(headers_, "Transfer-Encoding: Chunked");
+                    curl_easy_setopt(*eh_, CURLOPT_UPLOAD, 0L);
                     curl_easy_setopt(*eh_, CURLOPT_POST, 1L);
                     break;
                 case RequestType::HEAD:
@@ -292,6 +296,7 @@ namespace restincurl {
                     curl_easy_setopt(*eh_, CURLOPT_CUSTOMREQUEST, "OPTIONS");
                     break;
                 case RequestType::PATCH:
+                    headers_ = curl_slist_append(headers_, "Transfer-Encoding: Chunked");
                     curl_easy_setopt(*eh_, CURLOPT_CUSTOMREQUEST, "PATCH");
                     break;
                 case RequestType::DELETE:
@@ -597,7 +602,7 @@ namespace restincurl {
 #endif
         )
         : request_{std::make_unique<Request>()}
-        , options_{std::make_unique<Options>(request_->GetEasyHandle())}
+        , options_{std::make_unique<class Options>(request_->GetEasyHandle())}
 #if RESTINCURL_ENABLE_ASYNC
         , worker_(worker)
 #endif
@@ -632,8 +637,16 @@ namespace restincurl {
             return Prepare(RequestType::PUT, url);
         }
 
+        RequestBuilder& Patch(const std::string& url) {
+            return Prepare(RequestType::PATCH, url);
+        }
+
         RequestBuilder& Delete(const std::string& url) {
             return Prepare(RequestType::DELETE, url);
+        }
+
+        RequestBuilder& Options(const std::string& url) {
+            return Prepare(RequestType::OPTIONS, url);
         }
 
         RequestBuilder& Header(const char *value) {
@@ -765,7 +778,7 @@ namespace restincurl {
 
     private:
         std::unique_ptr<Request> request_;
-        std::unique_ptr<Options> options_;
+        std::unique_ptr<class Options> options_;
         std::string url_;
         RequestType request_type_ = RequestType::INVALID;
         bool have_data_in_ = false;
