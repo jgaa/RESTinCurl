@@ -90,11 +90,26 @@ STARTCASE(TestAbort)
         .Header("X-Client", "restincurl")
         .Execute();
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
     client.Close();
-    client.WaitForFinish();
 
 } ENDCASE
+
+STARTCASE(TestOutOfScope) // Need not to crash
+{
+    // Test abort
+    restincurl::Client client;
+    client.Build()->Get("http://localhost:3001/normal/manyposts")
+        .Option(CURLOPT_VERBOSE, 1L)
+        .AcceptJson()
+        .Header("X-Client", "restincurl")
+        .WithCompletion([&](const Result& result) {
+            EXPECT(result.curl_code == CURLE_OK);
+        })
+        .Execute();
+
+} ENDCASE
+
 
 }; //lest
 
