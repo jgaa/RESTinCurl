@@ -281,11 +281,11 @@ namespace restincurl {
                     curl_easy_setopt(*eh_, CURLOPT_HTTPGET, 1L);
                     break;
                 case RequestType::PUT:
-                    headers_ = curl_slist_append(headers_, "Transfer-Encoding: Chunked");
+                    headers_ = curl_slist_append(headers_, "Transfer-Encoding: chunked");
                     curl_easy_setopt(*eh_, CURLOPT_UPLOAD, 1L);
                     break;
                 case RequestType::POST:
-                    headers_ = curl_slist_append(headers_, "Transfer-Encoding: Chunked");
+                    headers_ = curl_slist_append(headers_, "Transfer-Encoding: chunked");
                     curl_easy_setopt(*eh_, CURLOPT_UPLOAD, 0L);
                     curl_easy_setopt(*eh_, CURLOPT_POST, 1L);
                     break;
@@ -296,7 +296,7 @@ namespace restincurl {
                     curl_easy_setopt(*eh_, CURLOPT_CUSTOMREQUEST, "OPTIONS");
                     break;
                 case RequestType::PATCH:
-                    headers_ = curl_slist_append(headers_, "Transfer-Encoding: Chunked");
+                    headers_ = curl_slist_append(headers_, "Transfer-Encoding: chunked");
                     curl_easy_setopt(*eh_, CURLOPT_CUSTOMREQUEST, "PATCH");
                     break;
                 case RequestType::DELETE:
