@@ -26,6 +26,12 @@ int main( int argc, char * argv[]) {
         })
         .Execute();
 
+    // If the client goes out of scope, it will terminate all ongoing
+    // requests, so we need to wait here for the request to finish.
+
+    // Tell client that we want to close when the request is finish
     client.CloseWhenFinished();
+
+    // Wait for the worker-thread in the client to quit
     client.WaitForFinish();
 }
