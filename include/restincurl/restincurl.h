@@ -379,7 +379,8 @@ namespace restincurl {
 
         ~Worker() {
             if (thread_.joinable()) {
-                thread_.detach();
+                Close();
+                Join();
             }
         }
 
@@ -423,9 +424,14 @@ namespace restincurl {
         }
 
         void Dequeue() {
-            lock_t lock(mutex_);
+            decltype(queue_) tmp;
 
-            for(auto& req: queue_) {
+            {
+                lock_t lock(mutex_);
+                tmp = std::move(queue_);
+            }
+
+            for(auto& req: tmp) {
                 assert(req);
                 const auto& eh = req->GetEasyHandle();
                 RESTINCURL_LOG("Adding request: " << eh);
@@ -435,8 +441,6 @@ namespace restincurl {
                     throw CurlException("curl_multi_add_handle", mc);
                 }
             }
-
-            queue_.clear();
         }
 
         void Init() {
