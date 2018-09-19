@@ -4,7 +4,7 @@
  * Just to get an idea about the size of the
  * binary the library produce.
  */
-#define RESTINCURL_ENABLE_DEFAULT_LOGGER 1
+#define RESTINCURL_USE_SYSLOG 1
 
 #include "restincurl/restincurl.h"
 

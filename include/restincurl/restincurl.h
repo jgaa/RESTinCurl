@@ -57,6 +57,18 @@
 #   define RESTINCURL_ENABLE_ASYNC 1
 #endif
 
+#if defined(RESTINCURL_USE_SYSLOG) || defined(RESTINCURL_USE_ANDROID_NDK_LOG)
+#   ifdef RESTINCURL_USE_SYSLOG
+#       include <syslog.h>
+#   endif
+#   ifdef RESTINCURL_USE_ANDROID_NDK_LOG
+#       include <log.h>
+#   endif
+#   include <sstream>
+#   define RESTINCURL_LOG(msg) ::restincurl::Log(restincurl::LogLevel::DEBUG).Line() << msg
+#endif
+
+
 #ifndef RESTINCURL_ENABLE_DEFAULT_LOGGER
 #   define RESTINCURL_ENABLE_DEFAULT_LOGGER 0
 #endif
@@ -69,8 +81,43 @@
 #   endif
 #endif
 
-
 namespace restincurl {
+
+#if defined(RESTINCURL_USE_SYSLOG)
+    enum class LogLevel { DEBUG };
+
+    class Log {
+    public:
+        Log(const LogLevel level) : level_{level} {}
+        ~Log() {
+#   ifdef RESTINCURL_USE_SYSLOG
+            static const std::array<int, 1> syslog_priority = { LOG_DEBUG };
+            static std::once_flag syslog_opened;
+            std::call_once(syslog_opened, [] {
+                openlog(nullptr, 0, LOG_USER);
+            });
+#   endif
+#   ifdef RESTINCURL_USE_ANDROID_NDK_LOG
+            static const std::array<int, 1> android_priority = { ANDROID_LOG_DEBUG };
+#   endif
+            const auto msg = out_.str();
+
+#   ifdef RESTINCURL_USE_SYSLOG
+            syslog(syslog_priority.at(static_cast<int>(level_)), "%s", msg.c_str());
+#   endif
+#   ifdef RESTINCURL_USE_ANDROID_NDK_LOG
+            __android_log_write(android_priority.at(static_cast<int>(level_)),
+                                "restincurl", msg.c_str());
+#   endif
+        }
+
+        std::ostringstream& Line() { return out_; }
+
+private:
+        const LogLevel level_;
+        std::ostringstream out_;
+    };
+#endif
 
     using lock_t = std::lock_guard<std::mutex>;
 
