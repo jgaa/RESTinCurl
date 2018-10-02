@@ -124,8 +124,15 @@ private:
     using lock_t = std::lock_guard<std::mutex>;
 
     struct Result {
+        Result() = default;
+        Result(const CURLcode& code) {
+            curl_code = code;
+            msg = curl_easy_strerror(code);
+        }
+        
         CURLcode curl_code = {};
         long http_response_code = {};
+        std::string msg;
     };
 
     enum class RequestType { GET, PUT, POST, HEAD, DELETE, PATCH, OPTIONS, INVALID };
@@ -314,8 +321,8 @@ private:
 
     private:
         void CallCompletion(CURLcode cc) {
-            Result result;
-            result.curl_code = cc;
+            Result result(cc);
+           
             curl_easy_getinfo (*eh_, CURLINFO_RESPONSE_CODE,
                                &result.http_response_code);
             RESTINCURL_LOG("Complete: http code: " << result.http_response_code);
