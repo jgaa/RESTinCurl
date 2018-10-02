@@ -779,6 +779,18 @@ private:
             return *this;
         }
 
+        // Set to -1 to disable
+        RequestBuilder& RequestTimeout(const long timeout) {
+            request_timeout_ = timeout;
+            return *this;
+        }
+        
+        // Set to -1 to disable
+        RequestBuilder& ConnectTimeout(const long timeout) {
+            connect_timeout_ = timeout;
+            return *this;
+        }
+        
         // Outgoing data
         template <typename T>
         RequestBuilder& SendData(OutDataHandler<T>& dh) {
@@ -850,13 +862,20 @@ private:
                 if (have_data_out_) {
                     options_->Set(CURLOPT_UPLOAD, 1L);
                 }
+                
+                if (request_timeout_ >= 0) {
+                    options_->Set(CURLOPT_TIMEOUT_MS, request_timeout_);
+                }
 
+                if (connect_timeout_ >= 0) {
+                    options_->Set(CURLOPT_CONNECTTIMEOUT_MS, connect_timeout_);
+                }
+                
                 // Set headers
                 if (request_->GetHeaders()) {
                     options_->Set(CURLOPT_HTTPHEADER, request_->GetHeaders());
                 }
 
-                // TODO: Set up timeout
                 // TODO: Prepare the final url (we want nice, correctly encoded request arguments)
                 options_->Set(CURLOPT_URL, url_);
                 RESTINCURL_LOG("Preparing connect to: " << url_);
@@ -888,6 +907,8 @@ private:
         bool have_data_out_ = false;
         bool is_built_ = false;
         completion_fn_t completion_;
+        long request_timeout_ = 10000L; // 10 seconds
+        long connect_timeout_ = 3000L; // 1 second
 #if RESTINCURL_ENABLE_ASYNC
         Worker& worker_;
 #endif
