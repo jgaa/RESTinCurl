@@ -119,6 +119,8 @@ private:
     };
 #endif
 
+
+
     using lock_t = std::lock_guard<std::mutex>;
 
     struct Result {
@@ -644,6 +646,41 @@ private:
             const auto bytes = size * nitems;
             return bytes;
         }
+
+        static int debug_callback(CURL *handle, curl_infotype type,
+             char *data, size_t size,
+             void *userp) {
+
+            std::string msg;
+            switch(type) {
+            case CURLINFO_TEXT:
+                msg = "==> Info: ";
+                break;
+            case CURLINFO_HEADER_OUT:
+                msg =  "=> Send header: ";
+                break;
+            case CURLINFO_DATA_OUT:
+                msg = "=> Send data: ";
+                break;
+            case CURLINFO_SSL_DATA_OUT:
+                msg = "=> Send SSL data: ";
+                break;
+            case CURLINFO_HEADER_IN:
+                msg = "<= Recv header: ";
+                break;
+            case CURLINFO_DATA_IN:
+                msg = "<= Recv data: ";
+                break;
+            case CURLINFO_SSL_DATA_IN:
+                msg = "<= Recv SSL data: ";
+                break;
+            }
+
+            std::copy(data, data + size, std::back_inserter(msg));
+            RESTINCURL_LOG(handle << " " << msg);
+            return 0;
+        }
+
     public:
         using ptr_t = std::unique_ptr<RequestBuilder>;
         RequestBuilder(
@@ -724,6 +761,14 @@ private:
         RequestBuilder& Option(const CURLoption& opt, const T& value) {
             assert(!is_built_);
             options_->Set(opt, value);
+            return *this;
+        }
+
+        RequestBuilder& Trace(bool enable = true) {
+            if (enable) {
+                Option(CURLOPT_DEBUGFUNCTION, debug_callback);
+                Option(CURLOPT_VERBOSE, 1L);
+            }
             return *this;
         }
 

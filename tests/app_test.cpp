@@ -4,7 +4,8 @@
  * Just to get an idea about the size of the
  * binary the library produce.
  */
-#define RESTINCURL_USE_SYSLOG 1
+//#define RESTINCURL_USE_SYSLOG 0
+#define RESTINCURL_ENABLE_DEFAULT_LOGGER 1
 
 #include "restincurl/restincurl.h"
 
@@ -21,6 +22,7 @@ int main( int argc, char * argv[]) {
         .AcceptJson()
         .StoreData(data)
         .Header("X-Client", "restincurl")
+        .Trace()
         .WithCompletion([&](const Result& result) {
             clog << "In callback! HTTP result code was " << result.http_response_code << endl;
         })
