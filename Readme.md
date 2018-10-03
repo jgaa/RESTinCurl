@@ -20,9 +20,9 @@ This is a very simple library that use the C library libcurl to perform HTTP cli
 - [x] Add a queue to add requests
 - [x] Add a pipe to signal the worker-thread via select()
 - [ ] Make some sort of timer, so that we clean up and stop the thread after #time
-- [ ] Set default timeout on requests
+- [x] Set default timeout on requests
 - [x] Test on IOS
-- [ ] Test on Android
+- [x] Test on Android
 - [ ] How does libraries usually shut down on ios and Android when the app is killed?
 - [ ] Make sure connection re-use it utilized
 - [ ] Queue new requests if we reach RESTINCURL_MAX_CONNECTIONS concurrent connections
