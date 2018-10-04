@@ -62,9 +62,9 @@
 #endif
 
 #if defined(_LOGFAULT_H) && !defined (RESTINCURL_LOG) && !defined (RESTINCURL_LOG_TRACE)
-#   define RESTINCURL_LOG(msg)    LFLOG_DEBUG << msg
+#   define RESTINCURL_LOG(msg)    LFLOG_DEBUG << "restincurl: " << msg
 #   if RESTINCURL_LOG_VERBOSE_ENABLE
-#       define RESTINCURL_LOG_TRACE   LFLOG_IFALL_TRACE(msg)
+#       define RESTINCURL_LOG_TRACE   LFLOG_IFALL_TRACE("restincurl: " << msg)
 #   endif // RESTINCURL_LOG_VERBOSE_ENABLE
 #endif
 
