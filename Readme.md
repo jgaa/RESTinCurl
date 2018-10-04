@@ -87,6 +87,20 @@ Here is a [test-app](tests/app_test.cpp), doing one request from main()
 
 The [test-cases](tests/general_tests.cpp) shows most of the features in use.
 
+## Logging
+
+Use these macros to enable logging:
+
+- **`RESTINCURL_ENABLE_DEFAULT_LOGGER`** Log to `std::clog`
+- **`RESTINCURL_USE_SYSLOG`** Log to syslog (Linux / Unix)
+
+If you use [logfault](https://github.com/jgaa/logfault), you may find this code useful:
+
+```C++
+#define RESTINCURL_LOG(msg) LFLOG_IFALL_TRACE("restincurl: " << msg)
+#include "resrincurl/restincurl.h"
+```
+
 ## Todo's
 - [ ] Ensure thread safety with OpenSSL
 - [ ] Make some sort of timer, so that we clean up and stop the thread after #time
