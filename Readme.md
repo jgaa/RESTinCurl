@@ -1,4 +1,4 @@
-# Rest in Curl - Modern C++ header only library wrapping around libcurl
+# Rest in Curl - Modern C++ header only library wrapper around libcurl
 
 C++ is fun. Boost::asio is lots of fun. Unfortunately, in some projects, they cannot be used without introducing great pain. That's why we need the *restincurl* library.
 
