@@ -47,7 +47,7 @@ that thread.
 
 *RESTinCurl* is a very thin wrapper over libcurl. When you set up a request that returns data, you need to
 supply a data-buffer for the data. For json payloads, a std::string is fine. Since the data-buffer must
-stay in scope until the asynchronous request is complete, I often use `std::stared_ptr<std::string>` types and
+stay in scope until the asynchronous request is complete, I often use `std::shared_ptr<std::string>` types and
 capture an instance of the `shared_ptr` in the lambda. That way I don't have to further track the lifetime of the
 data-buffer in code.
 
