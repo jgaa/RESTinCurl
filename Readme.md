@@ -44,7 +44,7 @@ that thread.
 
 ## Data
 
-*RESTinCurl* is a very thin wrapper over libcurl. Wnen you set up a request that returns data, you need to
+*RESTinCurl* is a very thin wrapper over libcurl. When you set up a request that returns data, you need to
 supply a data-buffer for the data. For json payloads, a std::string is fine. Since the data-buffer must
 stay in scope until the asynchronous request is complete, I often use `std::stared_ptr<std::string>` types and
 capture an instance of the `shared_ptr` in the lambda. That way I don't have to further track the lifetime of the
@@ -57,9 +57,7 @@ It's called from the UI thread and returns immediately. When the request is fini
 callback supplied to `getBalance` is called.
 
 ```C++
-void AccountImpl::getBalance(const std::string& tokenType,
-                            const secure_str_t& passphrase,
-                            IAccount::balance_callback_t callback) const {
+void AccountImpl::getBalance(balance_callback_t callback) const {
 
     const auto address = getAddress();
     const string url = get_rest_url() + "api.v.1.0/balance?address="s + address;
