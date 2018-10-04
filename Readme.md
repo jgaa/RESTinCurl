@@ -18,18 +18,19 @@ Using RESTinCurl is simple.
 You build a query, and a functor that gets called when the request finish (or fail).
 
 Example:
+
 ```C++
 restincurl::Client client;
 std::string data;
 client.Build()->Get("https://api.example.com/")
-        .AcceptJson()
-        .StoreData(data)
-        .Header("X-Client", "restincurl")
-        .Trace()
-        .WithCompletion([&](const Result& result) {
-            clog << "In callback! HTTP result code was " << result.http_response_code << endl;
-        })
-        .Execute();
+    .AcceptJson()
+    .StoreData(data)
+    .Header("X-Client", "restincurl")
+    .Trace()
+    .WithCompletion([&](const Result& result) {
+        clog << "In callback! HTTP result code was " << result.http_response_code << endl;
+    })
+    .Execute();
 ```
 
 Here use `AcceptJson` to tell the server that we accept json payloads. We ask *RESTinCurl* to
