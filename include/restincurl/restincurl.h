@@ -129,7 +129,7 @@ private:
             curl_code = code;
             msg = curl_easy_strerror(code);
         }
-        
+
         CURLcode curl_code = {};
         long http_response_code = {};
         std::string msg;
@@ -322,7 +322,7 @@ private:
     private:
         void CallCompletion(CURLcode cc) {
             Result result(cc);
-           
+
             curl_easy_getinfo (*eh_, CURLINFO_RESPONSE_CODE,
                                &result.http_response_code);
             RESTINCURL_LOG("Complete: http code: " << result.http_response_code);
@@ -784,13 +784,13 @@ private:
             request_timeout_ = timeout;
             return *this;
         }
-        
+
         // Set to -1 to disable
         RequestBuilder& ConnectTimeout(const long timeout) {
             connect_timeout_ = timeout;
             return *this;
         }
-        
+
         // Outgoing data
         template <typename T>
         RequestBuilder& SendData(OutDataHandler<T>& dh) {
@@ -862,7 +862,7 @@ private:
                 if (have_data_out_) {
                     options_->Set(CURLOPT_UPLOAD, 1L);
                 }
-                
+
                 if (request_timeout_ >= 0) {
                     options_->Set(CURLOPT_TIMEOUT_MS, request_timeout_);
                 }
@@ -870,7 +870,7 @@ private:
                 if (connect_timeout_ >= 0) {
                     options_->Set(CURLOPT_CONNECTTIMEOUT_MS, connect_timeout_);
                 }
-                
+
                 // Set headers
                 if (request_->GetHeaders()) {
                     options_->Set(CURLOPT_HTTPHEADER, request_->GetHeaders());
