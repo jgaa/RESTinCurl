@@ -98,7 +98,7 @@ If you use [logfault](https://github.com/jgaa/logfault), you may find this code 
 
 ```C++
 #define RESTINCURL_LOG(msg) LFLOG_IFALL_TRACE("restincurl: " << msg)
-#include "resrincurl/restincurl.h"
+#include "restincurl/restincurl.h"
 ```
 
 ## Todo's
