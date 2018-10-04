@@ -3,7 +3,7 @@
 C++ is fun. Boost::asio is lots of fun. Unfortunately, in some projects, they cannot be used without introducing great pain. That's why we need the *restincurl* library.
 For desktop and server projects, I personally prefer the much more interesting [restc-cpp](https://github.com/jgaa/restc-cpp) project.
 
-This is a very simple library that use the C library libcurl to perform HTTP client operations on web servers. It's targeting REST api's using HTTP and (probably) json. Restincurl does not provide json itself. In our examples, we use the excellent [nlohmann/json](https://github.com/nlohmann/json) header only library.
+*RESTinCurl* is a very simple library that use the C library libcurl to perform HTTP client operations on web servers. It's targeting REST api's using HTTP and (probably) json. Restincurl does not provide json itself. In our examples, we use the excellent [nlohmann/json](https://github.com/nlohmann/json) header only library.
 
 ## Design Goals
 
@@ -14,7 +14,7 @@ This is a very simple library that use the C library libcurl to perform HTTP cli
 
 ## How it works
 
-Using RESTinCurl is simple.
+Using *RESTinCurl* is simple.
 
 You build a query, and a functor that gets called when the request finish (or fail).
 
