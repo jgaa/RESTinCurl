@@ -78,7 +78,8 @@ void AccountImpl::getBalance(balance_callback_t callback) const {
             }
         })
         .Execute();
-}```
+}
+```
 
 ## More examples
 
