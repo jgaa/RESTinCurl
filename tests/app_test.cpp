@@ -16,9 +16,9 @@ int main( int argc, char * argv[]) {
 
     restincurl::Client client;
     string data;
-    restincurl::InDataHandler<std::string> data_handler(data);
+    //restincurl::InDataHandler<std::string> data_handler(data);
 
-    client.Build()->Get("http://localhost:3001/normal/manyposts")
+    client.Build()->Get("http://localhost:3001/normal/posts")
         .AcceptJson()
         .StoreData(data)
         .Header("X-Client", "restincurl")
