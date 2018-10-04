@@ -59,7 +59,6 @@ callback supplied to `getBalance` is called.
 
 ```C++
 void AccountImpl::getBalance(balance_callback_t callback) const {
-
     const auto address = getAddress();
     const string url = get_rest_url() + "api.v.1.0/balance?address="s + address;
     auto data = make_shared<string>(); // We get the body from the rest request here
