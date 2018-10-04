@@ -57,6 +57,17 @@
 #   define RESTINCURL_ENABLE_ASYNC 1
 #endif
 
+#ifndef RESTINCURL_LOG_VERBOSE_ENABLE
+#   define RESTINCURL_LOG_VERBOSE_ENABLE 0
+#endif
+
+#if defined(_LOGFAULT_H) && !defined (RESTINCURL_LOG) && !defined (RESTINCURL_LOG_TRACE)
+#   define RESTINCURL_LOG(msg)    LFLOG_DEBUG << msg
+#   if RESTINCURL_LOG_VERBOSE_ENABLE
+#       define RESTINCURL_LOG_TRACE   LFLOG_IFALL_TRACE(msg)
+#   endif // RESTINCURL_LOG_VERBOSE_ENABLE
+#endif
+
 #if defined(RESTINCURL_USE_SYSLOG) || defined(RESTINCURL_USE_ANDROID_NDK_LOG)
 #   ifdef RESTINCURL_USE_SYSLOG
 #       include <syslog.h>
@@ -68,7 +79,6 @@
 #   define RESTINCURL_LOG(msg) ::restincurl::Log(restincurl::LogLevel::DEBUG).Line() << msg
 #endif
 
-
 #ifndef RESTINCURL_ENABLE_DEFAULT_LOGGER
 #   define RESTINCURL_ENABLE_DEFAULT_LOGGER 0
 #endif
@@ -78,6 +88,14 @@
 #       define RESTINCURL_LOG(msg) std::clog << msg << std::endl
 #   else
 #       define RESTINCURL_LOG(msg)
+#   endif
+#endif
+
+#ifndef RESTINCURL_LOG_TRACE
+#   if RESTINCURL_LOG_VERBOSE_ENABLE
+#       define RESTINCURL_LOG_TRACE(msg) RESTINCURL_LOG(msg)
+#   else
+#       define RESTINCURL_LOG_TRACE(msg)
 #   endif
 #endif
 
@@ -227,7 +245,7 @@ private:
     template <typename T>
     struct InDataHandler : public DataHandlerBase{
         InDataHandler(T& data) : data_{data} {
-            RESTINCURL_LOG("InDataHandler address: " << this);
+            RESTINCURL_LOG_TRACE("InDataHandler address: " << this);
         }
 
         static size_t write_callback(char *ptr, size_t size, size_t nitems, void *userdata) {
@@ -259,7 +277,7 @@ private:
                       bufptr);
             self->sendt_bytes_ += out_bytes;
 
-            RESTINCURL_LOG("Sent " << out_bytes << " of total " << self->data_.size() << " bytes.");
+            RESTINCURL_LOG_TRACE("Sent " << out_bytes << " of total " << self->data_.size() << " bytes.");
             return out_bytes;
         }
 
@@ -400,7 +418,7 @@ private:
 
         void Signal() {
             char byte = {};
-            RESTINCURL_LOG("Signal: Signaling!");
+            RESTINCURL_LOG_TRACE("Signal: Signaling!");
             if (write(pipefd_[FD_WRITE], &byte, 1) != 1) {
                 throw SystemException("write pipe", errno);
             }
@@ -412,7 +430,7 @@ private:
             bool rval = false;
             char byte = {};
             while(read(pipefd_[FD_READ], &byte, 1) > 0) {
-                RESTINCURL_LOG("Signal: Was signalled");
+                RESTINCURL_LOG_TRACE("Signal: Was signalled");
                 rval = true;
             }
 
@@ -450,7 +468,7 @@ private:
         }
 
         void Enqueue(Request::ptr_t req) {
-            RESTINCURL_LOG("Queuing request ");
+            RESTINCURL_LOG_TRACE("Queuing request ");
             lock_t lock(mutex_);
             queue_.push_back(std::move(req));
             Signal();
@@ -495,7 +513,7 @@ private:
             for(auto& req: tmp) {
                 assert(req);
                 const auto& eh = req->GetEasyHandle();
-                RESTINCURL_LOG("Adding request: " << eh);
+                RESTINCURL_LOG_TRACE("Adding request: " << eh);
                 ongoing_[eh] = std::move(req);
                 const auto mc = curl_multi_add_handle(handle_, eh);
                 if (mc != CURLM_OK) {
@@ -514,7 +532,7 @@ private:
 
         void Clean() {
             if (handle_) {
-                RESTINCURL_LOG("Calling curl_multi_cleanup: " << handle_);
+                RESTINCURL_LOG_TRACE("Calling curl_multi_cleanup: " << handle_);
                 curl_multi_cleanup(handle_);
                 handle_ = nullptr;
             }
@@ -529,7 +547,7 @@ private:
 
             while (!abort_ && (transfers_running || !close_pending_)) {
 
-                RESTINCURL_LOG("Run loop: transfers_running=" << transfers_running
+                RESTINCURL_LOG_TRACE("Run loop: transfers_running=" << transfers_running
                      << ", do_dequeue=" << do_dequeue
                      << ", close_pending_=" << close_pending_);
 
@@ -594,7 +612,7 @@ private:
 
                     /* get file descriptors from the transfers */
                     const auto mc = curl_multi_fdset(handle_, &fdread, &fdwrite, &fdexcep, &maxfd);
-                    RESTINCURL_LOG("maxfd: " << maxfd);
+                    RESTINCURL_LOG_TRACE("maxfd: " << maxfd);
                     if (mc != CURLM_OK) {
                         throw CurlException("curl_multi_fdset", mc);
                     }
@@ -615,11 +633,11 @@ private:
                 maxfd = std::max(signalfd,  maxfd) + 1;
 
                 const auto rval = select(maxfd, &fdread, &fdwrite, &fdexcep, &tv);
-                RESTINCURL_LOG("select(" << maxfd << ") returned: " << rval);
+                RESTINCURL_LOG_TRACE("select(" << maxfd << ") returned: " << rval);
 
                 if (rval > 0) {
                     if (FD_ISSET(signalfd, &fdread)) {
-                        RESTINCURL_LOG("FD_ISSET was true: ");
+                        RESTINCURL_LOG_TRACE("FD_ISSET was true: ");
                         do_dequeue = signal_.WasSignalled();
                     }
 
