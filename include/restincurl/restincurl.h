@@ -62,7 +62,7 @@
 #       include <syslog.h>
 #   endif
 #   ifdef RESTINCURL_USE_ANDROID_NDK_LOG
-#       include <log.h>
+#       include <android/log.h>
 #   endif
 #   include <sstream>
 #   define RESTINCURL_LOG(msg) ::restincurl::Log(restincurl::LogLevel::DEBUG).Line() << msg
@@ -83,7 +83,7 @@
 
 namespace restincurl {
 
-#if defined(RESTINCURL_USE_SYSLOG)
+#if defined(RESTINCURL_USE_SYSLOG) || defined(RESTINCURL_USE_ANDROID_NDK_LOG)
     enum class LogLevel { DEBUG };
 
     class Log {
@@ -543,7 +543,10 @@ private:
                     auto it = ongoing_.find(m->easy_handle);
                     if (it != ongoing_.end()) {
                         RESTINCURL_LOG("Finishing request with easy-handle: "
-                            << (EasyHandle::handle_t)it->second->GetEasyHandle());
+                            << (EasyHandle::handle_t)it->second->GetEasyHandle()
+                            << "; with result: " << m->data.result << " expl: '" << curl_easy_strerror(m->data.result)
+                            << "'; with msg: " << m->msg);
+
                         try {
                             it->second->Complete(m->data.result, m->msg);
                         } catch(const std::exception& ex) {
@@ -804,6 +807,7 @@ private:
                 // TODO: Set up timeout
                 // TODO: Prepare the final url (we want nice, correctly encoded request arguments)
                 options_->Set(CURLOPT_URL, url_);
+                RESTINCURL_LOG("Preparing connect to: " << url_);
 
                 // Prepare request
                 request_->Prepare(request_type_, std::move(completion_));
