@@ -57,6 +57,17 @@
 #   define RESTINCURL_ENABLE_ASYNC 1
 #endif
 
+#ifndef RESTINCURL_LOG_VERBOSE_ENABLE
+#   define RESTINCURL_LOG_VERBOSE_ENABLE 0
+#endif
+
+#if defined(_LOGFAULT_H) && !defined (RESTINCURL_LOG) && !defined (RESTINCURL_LOG_TRACE)
+#   define RESTINCURL_LOG(msg)    LFLOG_DEBUG << "restincurl: " << msg
+#   if RESTINCURL_LOG_VERBOSE_ENABLE
+#       define RESTINCURL_LOG_TRACE   LFLOG_IFALL_TRACE("restincurl: " << msg)
+#   endif // RESTINCURL_LOG_VERBOSE_ENABLE
+#endif
+
 #if defined(RESTINCURL_USE_SYSLOG) || defined(RESTINCURL_USE_ANDROID_NDK_LOG)
 #   ifdef RESTINCURL_USE_SYSLOG
 #       include <syslog.h>
@@ -68,7 +79,6 @@
 #   define RESTINCURL_LOG(msg) ::restincurl::Log(restincurl::LogLevel::DEBUG).Line() << msg
 #endif
 
-
 #ifndef RESTINCURL_ENABLE_DEFAULT_LOGGER
 #   define RESTINCURL_ENABLE_DEFAULT_LOGGER 0
 #endif
@@ -78,6 +88,14 @@
 #       define RESTINCURL_LOG(msg) std::clog << msg << std::endl
 #   else
 #       define RESTINCURL_LOG(msg)
+#   endif
+#endif
+
+#ifndef RESTINCURL_LOG_TRACE
+#   if RESTINCURL_LOG_VERBOSE_ENABLE
+#       define RESTINCURL_LOG_TRACE(msg) RESTINCURL_LOG(msg)
+#   else
+#       define RESTINCURL_LOG_TRACE(msg)
 #   endif
 #endif
 
@@ -119,11 +137,20 @@ private:
     };
 #endif
 
+
+
     using lock_t = std::lock_guard<std::mutex>;
 
     struct Result {
+        Result() = default;
+        Result(const CURLcode& code) {
+            curl_code = code;
+            msg = curl_easy_strerror(code);
+        }
+
         CURLcode curl_code = {};
         long http_response_code = {};
+        std::string msg;
     };
 
     enum class RequestType { GET, PUT, POST, HEAD, DELETE, PATCH, OPTIONS, INVALID };
@@ -218,7 +245,7 @@ private:
     template <typename T>
     struct InDataHandler : public DataHandlerBase{
         InDataHandler(T& data) : data_{data} {
-            RESTINCURL_LOG("InDataHandler address: " << this);
+            RESTINCURL_LOG_TRACE("InDataHandler address: " << this);
         }
 
         static size_t write_callback(char *ptr, size_t size, size_t nitems, void *userdata) {
@@ -250,7 +277,7 @@ private:
                       bufptr);
             self->sendt_bytes_ += out_bytes;
 
-            RESTINCURL_LOG("Sent " << out_bytes << " of total " << self->data_.size() << " bytes.");
+            RESTINCURL_LOG_TRACE("Sent " << out_bytes << " of total " << self->data_.size() << " bytes.");
             return out_bytes;
         }
 
@@ -312,8 +339,8 @@ private:
 
     private:
         void CallCompletion(CURLcode cc) {
-            Result result;
-            result.curl_code = cc;
+            Result result(cc);
+
             curl_easy_getinfo (*eh_, CURLINFO_RESPONSE_CODE,
                                &result.http_response_code);
             RESTINCURL_LOG("Complete: http code: " << result.http_response_code);
@@ -391,7 +418,7 @@ private:
 
         void Signal() {
             char byte = {};
-            RESTINCURL_LOG("Signal: Signaling!");
+            RESTINCURL_LOG_TRACE("Signal: Signaling!");
             if (write(pipefd_[FD_WRITE], &byte, 1) != 1) {
                 throw SystemException("write pipe", errno);
             }
@@ -403,7 +430,7 @@ private:
             bool rval = false;
             char byte = {};
             while(read(pipefd_[FD_READ], &byte, 1) > 0) {
-                RESTINCURL_LOG("Signal: Was signalled");
+                RESTINCURL_LOG_TRACE("Signal: Was signalled");
                 rval = true;
             }
 
@@ -441,7 +468,7 @@ private:
         }
 
         void Enqueue(Request::ptr_t req) {
-            RESTINCURL_LOG("Queuing request ");
+            RESTINCURL_LOG_TRACE("Queuing request ");
             lock_t lock(mutex_);
             queue_.push_back(std::move(req));
             Signal();
@@ -486,7 +513,7 @@ private:
             for(auto& req: tmp) {
                 assert(req);
                 const auto& eh = req->GetEasyHandle();
-                RESTINCURL_LOG("Adding request: " << eh);
+                RESTINCURL_LOG_TRACE("Adding request: " << eh);
                 ongoing_[eh] = std::move(req);
                 const auto mc = curl_multi_add_handle(handle_, eh);
                 if (mc != CURLM_OK) {
@@ -505,7 +532,7 @@ private:
 
         void Clean() {
             if (handle_) {
-                RESTINCURL_LOG("Calling curl_multi_cleanup: " << handle_);
+                RESTINCURL_LOG_TRACE("Calling curl_multi_cleanup: " << handle_);
                 curl_multi_cleanup(handle_);
                 handle_ = nullptr;
             }
@@ -520,7 +547,7 @@ private:
 
             while (!abort_ && (transfers_running || !close_pending_)) {
 
-                RESTINCURL_LOG("Run loop: transfers_running=" << transfers_running
+                RESTINCURL_LOG_TRACE("Run loop: transfers_running=" << transfers_running
                      << ", do_dequeue=" << do_dequeue
                      << ", close_pending_=" << close_pending_);
 
@@ -585,7 +612,7 @@ private:
 
                     /* get file descriptors from the transfers */
                     const auto mc = curl_multi_fdset(handle_, &fdread, &fdwrite, &fdexcep, &maxfd);
-                    RESTINCURL_LOG("maxfd: " << maxfd);
+                    RESTINCURL_LOG_TRACE("maxfd: " << maxfd);
                     if (mc != CURLM_OK) {
                         throw CurlException("curl_multi_fdset", mc);
                     }
@@ -606,11 +633,11 @@ private:
                 maxfd = std::max(signalfd,  maxfd) + 1;
 
                 const auto rval = select(maxfd, &fdread, &fdwrite, &fdexcep, &tv);
-                RESTINCURL_LOG("select(" << maxfd << ") returned: " << rval);
+                RESTINCURL_LOG_TRACE("select(" << maxfd << ") returned: " << rval);
 
                 if (rval > 0) {
                     if (FD_ISSET(signalfd, &fdread)) {
-                        RESTINCURL_LOG("FD_ISSET was true: ");
+                        RESTINCURL_LOG_TRACE("FD_ISSET was true: ");
                         do_dequeue = signal_.WasSignalled();
                     }
 
@@ -644,6 +671,41 @@ private:
             const auto bytes = size * nitems;
             return bytes;
         }
+
+        static int debug_callback(CURL *handle, curl_infotype type,
+             char *data, size_t size,
+             void *userp) {
+
+            std::string msg;
+            switch(type) {
+            case CURLINFO_TEXT:
+                msg = "==> Info: ";
+                break;
+            case CURLINFO_HEADER_OUT:
+                msg =  "=> Send header: ";
+                break;
+            case CURLINFO_DATA_OUT:
+                msg = "=> Send data: ";
+                break;
+            case CURLINFO_SSL_DATA_OUT:
+                msg = "=> Send SSL data: ";
+                break;
+            case CURLINFO_HEADER_IN:
+                msg = "<= Recv header: ";
+                break;
+            case CURLINFO_DATA_IN:
+                msg = "<= Recv data: ";
+                break;
+            case CURLINFO_SSL_DATA_IN:
+                msg = "<= Recv SSL data: ";
+                break;
+            }
+
+            std::copy(data, data + size, std::back_inserter(msg));
+            RESTINCURL_LOG(handle << " " << msg);
+            return 0;
+        }
+
     public:
         using ptr_t = std::unique_ptr<RequestBuilder>;
         RequestBuilder(
@@ -727,6 +789,26 @@ private:
             return *this;
         }
 
+        RequestBuilder& Trace(bool enable = true) {
+            if (enable) {
+                Option(CURLOPT_DEBUGFUNCTION, debug_callback);
+                Option(CURLOPT_VERBOSE, 1L);
+            }
+            return *this;
+        }
+
+        // Set to -1 to disable
+        RequestBuilder& RequestTimeout(const long timeout) {
+            request_timeout_ = timeout;
+            return *this;
+        }
+
+        // Set to -1 to disable
+        RequestBuilder& ConnectTimeout(const long timeout) {
+            connect_timeout_ = timeout;
+            return *this;
+        }
+
         // Outgoing data
         template <typename T>
         RequestBuilder& SendData(OutDataHandler<T>& dh) {
@@ -799,12 +881,19 @@ private:
                     options_->Set(CURLOPT_UPLOAD, 1L);
                 }
 
+                if (request_timeout_ >= 0) {
+                    options_->Set(CURLOPT_TIMEOUT_MS, request_timeout_);
+                }
+
+                if (connect_timeout_ >= 0) {
+                    options_->Set(CURLOPT_CONNECTTIMEOUT_MS, connect_timeout_);
+                }
+
                 // Set headers
                 if (request_->GetHeaders()) {
                     options_->Set(CURLOPT_HTTPHEADER, request_->GetHeaders());
                 }
 
-                // TODO: Set up timeout
                 // TODO: Prepare the final url (we want nice, correctly encoded request arguments)
                 options_->Set(CURLOPT_URL, url_);
                 RESTINCURL_LOG("Preparing connect to: " << url_);
@@ -836,6 +925,8 @@ private:
         bool have_data_out_ = false;
         bool is_built_ = false;
         completion_fn_t completion_;
+        long request_timeout_ = 10000L; // 10 seconds
+        long connect_timeout_ = 3000L; // 1 second
 #if RESTINCURL_ENABLE_ASYNC
         Worker& worker_;
 #endif
