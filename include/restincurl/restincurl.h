@@ -699,6 +699,9 @@ private:
             case CURLINFO_SSL_DATA_IN:
                 msg = "<= Recv SSL data: ";
                 break;
+            case CURLINFO_END: // Don't seems to be used
+                msg = "<= End: ";
+                break;
             }
 
             std::copy(data, data + size, std::back_inserter(msg));
