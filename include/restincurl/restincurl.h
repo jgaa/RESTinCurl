@@ -57,6 +57,13 @@
 #   define RESTINCURL_ENABLE_ASYNC 1
 #endif
 
+// How long to wait for the next request before the idle worker-thread is stopped.
+// This will delete curl's connection-cache and cause a new thread to be created
+// and new connections to be made if there are new requests at at later time.
+#ifndef RESTINCURL_IDLE_TIMEOUT_SEC
+#   define RESTINCURL_IDLE_TIMEOUT_SEC 60
+#endif
+
 #ifndef RESTINCURL_LOG_VERBOSE_ENABLE
 #   define RESTINCURL_LOG_VERBOSE_ENABLE 0
 #endif
@@ -442,25 +449,69 @@ private:
     };
 
     class Worker {
-    public:
-        Worker()
-        : thread_{[&] {
-            try {
-                RESTINCURL_LOG("Starting thread " << std::this_thread::get_id());
-                Init();
-                Run();
-                Clean();
-            } catch (const std::exception& ex) {
-                RESTINCURL_LOG("Worker: ");
+        class WorkerThread {
+        public:
+            WorkerThread(std::function<void ()> && fn)
+            : thread_{std::move(fn)} {}
+
+            ~WorkerThread() {
+                if (thread_.get_id() == std::this_thread::get_id()) {
+                    // Allow the thread to finish exiting the lambda
+                    thread_.detach();
+                }
             }
-            RESTINCURL_LOG("Exiting thread " << std::this_thread::get_id());
-        }} {}
+
+            void Join() const {
+                std::call_once(joined_, [this] {
+                    const_cast<WorkerThread *>(this)->thread_.join();
+                });
+            }
+
+            bool Joinable() const {
+                return thread_.joinable();
+            }
+
+            operator std::thread& () { return thread_; }
+
+        private:
+            std::thread thread_;
+            mutable std::once_flag joined_;
+        };
+
+    public:
+        Worker() = default;
 
         ~Worker() {
-            if (thread_.joinable()) {
+            if (thread_ && thread_->Joinable()) {
                 Close();
                 Join();
             }
+        }
+
+        void PrepareThread() {
+            // Must only be called when the mutex_ is acquired!
+            assert(!mutex_.try_lock());
+            if (abort_ || done_) {
+                return;
+            }
+            if (!thread_) {
+                thread_ = std::make_shared<WorkerThread>([&] {
+                    try {
+                        RESTINCURL_LOG("Starting thread " << std::this_thread::get_id());
+                        Init();
+                        Run();
+                        Clean();
+                    } catch (const std::exception& ex) {
+                        RESTINCURL_LOG("Worker: " << ex.what());
+                    }
+                    RESTINCURL_LOG("Exiting thread " << std::this_thread::get_id());
+
+                    lock_t lock(mutex_);
+                    thread_.reset();
+                });
+            }
+            assert(!abort_);
+            assert(!done_);
         }
 
         static std::unique_ptr<Worker> Create() {
@@ -470,31 +521,56 @@ private:
         void Enqueue(Request::ptr_t req) {
             RESTINCURL_LOG_TRACE("Queuing request ");
             lock_t lock(mutex_);
+            PrepareThread();
             queue_.push_back(std::move(req));
             Signal();
         }
 
         void Join() const {
-            std::call_once(joined_, [this] {
-                const_cast<Worker *>(this)->thread_.join();
-            });
+            decltype(thread_) thd;
+
+            {
+                lock_t lock(mutex_);
+                if (thread_ && thread_->Joinable()) {
+                    thd = thread_;
+                }
+            }
+
+            if (thd) {
+                thd->Join();
+            }
         }
 
         // Let the current transfers complete, then quit
         void CloseWhenFinished() {
-            close_pending_ = true;
+            {
+                lock_t lock(mutex_);
+                close_pending_ = true;
+            }
             Signal();
         }
 
         // Shut down now. Abort all transfers
         void Close() {
-            abort_ = true;
+            {
+                lock_t lock(mutex_);
+                abort_ = true;
+            }
             Signal();
         }
 
         // Check if the run loop has finished.
         bool IsDone() const {
+            lock_t lock(mutex_);
             return done_;
+        }
+
+        bool HaveThread() const noexcept {
+            lock_t lock(mutex_);
+            if (thread_) {
+                return true;
+            }
+            return false;
         }
 
     private:
@@ -538,19 +614,30 @@ private:
             }
         }
 
+        bool EvaluateState(const bool transfersRunning, const bool doDequeue) const noexcept {
+            lock_t lock(mutex_);
+
+            RESTINCURL_LOG_TRACE("Run loop: transfers_running=" << transfersRunning
+                << ", do_dequeue=" << doDequeue
+                << ", close_pending_=" << close_pending_);
+
+            return !abort_ && (transfersRunning || !close_pending_);
+        }
+
+        auto GetNextTimeout() const noexcept {
+            return std::chrono::steady_clock::now()
+                + std::chrono::seconds(RESTINCURL_IDLE_TIMEOUT_SEC);
+        }
+
         void Run() {
             int transfers_running = -1;
             fd_set fdread = {};
             fd_set fdwrite = {};
             fd_set fdexcep = {};
             bool do_dequeue = true;
+            auto timeout = GetNextTimeout();
 
-            while (!abort_ && (transfers_running || !close_pending_)) {
-
-                RESTINCURL_LOG_TRACE("Run loop: transfers_running=" << transfers_running
-                     << ", do_dequeue=" << do_dequeue
-                     << ", close_pending_=" << close_pending_);
-
+            while (EvaluateState(transfers_running, do_dequeue)) {
 
                 if (do_dequeue) {
                     Dequeue();
@@ -562,6 +649,16 @@ private:
                 curl_multi_perform(handle_, &transfers_running);
                 if ((transfers_running == 0) && initial_ideling) {
                     transfers_running = -1; // Let's ignore close_pending_ until we have seen a request
+                }
+
+                // Shut down the thread if we have been idling too long
+                if (transfers_running == 0) {
+                    if (timeout < std::chrono::steady_clock::now()) {
+                        RESTINCURL_LOG("Idle timeout. Will shut down the worker-thread.");
+                        break;
+                    }
+                } else {
+                    timeout = GetNextTimeout();
                 }
 
                 int numLeft = {};
@@ -590,13 +687,18 @@ private:
                     }
                 }
 
-                // Avoid using select() as a timer when we need to exit anyway
-                if (abort_ || (!transfers_running && close_pending_)) {
-                    break;
+                {
+                    lock_t lock(mutex_);
+                    // Avoid using select() as a timer when we need to exit anyway
+                    if (abort_ || (!transfers_running && close_pending_)) {
+                        break;
+                    }
                 }
 
-                long timeout = 5000;
-                /* extract timeout value */
+                auto next_timeout = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    timeout - std::chrono::steady_clock::now());
+                long sleep_duration = std::max<long>(1, next_timeout.count());
+                /* extract sleep_duration value */
 
 
                 FD_ZERO(&fdread);
@@ -605,9 +707,9 @@ private:
 
                 int maxfd = -1;
                 if (transfers_running > 0) {
-                    curl_multi_timeout(handle_, &timeout);
-                    if (timeout < 0) {
-                        timeout = 1000;
+                    curl_multi_timeout(handle_, &sleep_duration);
+                    if (sleep_duration < 0) {
+                        sleep_duration = 1000;
                     }
 
                     /* get file descriptors from the transfers */
@@ -619,15 +721,20 @@ private:
 
                     if (maxfd == -1) {
                         // Curl want's us to revisit soon
-                        timeout = 50;
+                        sleep_duration = 50;
                     }
                 } // active transfers
 
                 struct timeval tv = {};
-                tv.tv_sec = timeout / 1000;
-                tv.tv_usec = (timeout % 1000) * 1000;
+                tv.tv_sec = sleep_duration / 1000;
+                tv.tv_usec = (sleep_duration % 1000) * 1000;
 
                 const auto signalfd = signal_.GetReadFd();
+
+                RESTINCURL_LOG_TRACE("Calling select() with timeout of "
+                    << sleep_duration
+                    << " ms. Next timeout in " << next_timeout.count() << " ms. "
+                    << transfers_running << " active transfers.");
 
                 FD_SET(signalfd, &fdread);
                 maxfd = std::max(signalfd,  maxfd) + 1;
@@ -642,20 +749,23 @@ private:
                     }
 
                 }
-            }
+            } // loop
 
-            done_ = true;
+
+            lock_t lock(mutex_);
+            if (close_pending_ || abort_) {
+                done_ = true;
+            }
         }
 
-        std::atomic_bool close_pending_ {false};
-        std::atomic_bool abort_ {false};
-        std::atomic_bool done_ {false};
+        bool close_pending_ {false};
+        bool abort_ {false};
+        bool done_ {false};
         decltype(curl_multi_init()) handle_ = {};
-        std::mutex mutex_;
-        std::thread thread_;
+        mutable std::mutex mutex_;
+        std::shared_ptr<WorkerThread> thread_;
         std::deque<Request::ptr_t> queue_;
         std::map<EasyHandle::handle_t, Request::ptr_t> ongoing_;
-        mutable std::once_flag joined_;
         Signaler signal_;
     };
 #endif // RESTINCURL_ENABLE_ASYNC
@@ -981,6 +1091,10 @@ private:
 
         void WaitForFinish() {
             worker_->Join();
+        }
+
+        bool HaveWorker() const {
+            return worker_->HaveThread();
         }
 #endif
 

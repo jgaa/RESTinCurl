@@ -1,7 +1,11 @@
 
 #define RESTINCURL_ENABLE_ASYNC 1
-//#define RESTINCURL_ENABLE_DEFAULT_LOGGER 1
+#define RESTINCURL_ENABLE_DEFAULT_LOGGER 1
+#define RESTINCURL_LOG_VERBOSE_ENABLE 1
 
+#include <future>
+
+#define RESTINCURL_IDLE_TIMEOUT_SEC 1
 #include "restincurl/restincurl.h"
 
 #include "lest/lest.hpp"
@@ -252,9 +256,56 @@ STARTCASE(TestDelete)
     EXPECT(callback_called);
 } ENDCASE
 
+STARTCASE(TestThread)
+{
+#if RESTINCURL_ENABLE_ASYNC
+    restincurl::Client client;
+    EXPECT(client.HaveWorker() == false);
+
+    {
+        std::promise<void> promise;
+        auto future = promise.get_future();
+
+        client.Build()->Head("http://localhost:3001/normal/manyposts")
+            .Option(CURLOPT_VERBOSE, 1L)
+            .AcceptJson()
+            .Header("X-Client", "restincurl")
+            .WithCompletion([&](const Result& result) {
+                EXPECT(result.curl_code == CURLE_OK);
+                promise.set_value();
+            })
+            .Execute();
+
+        future.wait();
+    }
+
+    EXPECT(client.HaveWorker() == true);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
+    EXPECT(client.HaveWorker() == false);
+
+    bool callback_called = false;
+    client.Build()->Head("http://localhost:3001/normal/manyposts")
+            .Option(CURLOPT_VERBOSE, 1L)
+            .AcceptJson()
+            .Header("X-Client", "restincurl")
+            .WithCompletion([&](const Result& result) {
+                EXPECT(result.curl_code == CURLE_OK);
+                callback_called = true;
+            })
+            .Execute();
+
+    client.CloseWhenFinished();
+    client.WaitForFinish();
+    EXPECT(client.HaveWorker() == false);
+    EXPECT(callback_called);
+
+#endif
+} ENDCASE
+
 }; //lest
 
 int main( int argc, char * argv[] )
 {
+    RESTINCURL_LOG("Running tests in thread " << std::this_thread::get_id());
     return lest::run( specification, argc, argv );
 }
