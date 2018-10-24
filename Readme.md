@@ -106,5 +106,5 @@ If you use [logfault](https://github.com/jgaa/logfault), you may find this code 
 - [ ] Ensure thread safety with OpenSSL
 - [x] Make some sort of timer, so that we clean up and stop the thread after #time
 - [x] Make sure connection re-use it utilized
-- [ ] Queue new requests if we reach RESTINCURL_MAX_CONNECTIONS concurrent connections
+- [x] Queue new requests if we reach RESTINCURL_MAX_CONNECTIONS concurrent connections
 - [ ] Write complete documentation

@@ -573,6 +573,11 @@ private:
             return false;
         }
 
+        size_t GetNumActiveRequests() const {
+            lock_t lock(mutex_);
+            return ongoing_.size();
+        }
+
     private:
         void Signal() {
             signal_.Signal();
@@ -583,7 +588,28 @@ private:
 
             {
                 lock_t lock(mutex_);
-                tmp = std::move(queue_);
+                if ((queue_.size() + ongoing_.size()) <= RESTINCURL_MAX_CONNECTIONS) {
+                    tmp = std::move(queue_);
+                    pending_entries_in_queue_ = false;
+                } else {
+                    auto remains = std::min(RESTINCURL_MAX_CONNECTIONS - ongoing_.size(), queue_.size());
+                    if (remains) {
+                        auto it = queue_.begin();
+                        RESTINCURL_LOG_TRACE("Adding only " << remains << " of " << queue_.size()
+                            << " requests from queue: << RESTINCURL_MAX_CONNECTIONS=" << RESTINCURL_MAX_CONNECTIONS);
+                        while(remains--) {
+                            assert(it != queue_.end());
+                            tmp.push_back(std::move(*it));
+                            ++it;
+                        }
+                        queue_.erase(queue_.begin(), it);
+                    } else {
+                        assert(ongoing_.size() == RESTINCURL_MAX_CONNECTIONS);
+                        RESTINCURL_LOG_TRACE("Adding no entries from queue: RESTINCURL_MAX_CONNECTIONS="
+                            << RESTINCURL_MAX_CONNECTIONS);
+                    }
+                    pending_entries_in_queue_ = true;
+                }
             }
 
             for(auto& req: tmp) {
@@ -749,6 +775,9 @@ private:
                     }
 
                 }
+                if (pending_entries_in_queue_) {
+                    do_dequeue = true;
+                }
             } // loop
 
 
@@ -761,6 +790,7 @@ private:
         bool close_pending_ {false};
         bool abort_ {false};
         bool done_ {false};
+        bool pending_entries_in_queue_ = false;
         decltype(curl_multi_init()) handle_ = {};
         mutable std::mutex mutex_;
         std::shared_ptr<WorkerThread> thread_;
@@ -1095,6 +1125,10 @@ private:
 
         bool HaveWorker() const {
             return worker_->HaveThread();
+        }
+
+        size_t GetNumActiveRequests() {
+            return worker_->GetNumActiveRequests();
         }
 #endif
 
