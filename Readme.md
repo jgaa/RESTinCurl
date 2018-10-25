@@ -108,3 +108,5 @@ If you use [logfault](https://github.com/jgaa/logfault), you may find this code 
 - [x] Make sure connection re-use it utilized
 - [x] Queue new requests if we reach RESTINCURL_MAX_CONNECTIONS concurrent connections
 - [ ] Write complete documentation
+- [ ] Test cases for non-async mode (RESTINCURL_ENABLE_ASYNC=0)
+
