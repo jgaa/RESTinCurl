@@ -678,7 +678,7 @@ private:
                 }
 
                 // Shut down the thread if we have been idling too long
-                if (transfers_running == 0) {
+                if (transfers_running <= 0) {
                     if (timeout < std::chrono::steady_clock::now()) {
                         RESTINCURL_LOG("Idle timeout. Will shut down the worker-thread.");
                         break;
