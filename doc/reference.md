@@ -25,7 +25,7 @@ are active, the thread will wait for a while (see `RESTINCURL_IDLE_TIMEOUT_SEC`)
 
 ### Constructor
 
-**`Client(bool init)`**
+**`Client(bool init = true)`**
 
 - **init** If true, the curl library is initialized. Set to false it libcurl
     is initialized somewhere else. The client will only initialize libcurl
@@ -40,29 +40,29 @@ Creates an instance of the `RequestBuilder` for use with this client.
 
 **`void CloseWhenFinished()`**
 
-Instructs the client to shut down the worker thread and release internal
-resources as soon as all ongoing requests are served. If new requests are
-added, they will also be served.
+    Instructs the client to shut down the worker thread and release internal
+    resources as soon as all ongoing requests are served. If new requests are
+    added, they will also be served.
 
 **`void Close()`**
 
-Close the client immediately. Any ongoing requests will be aborted. Callbacks
-for those requests are not called.
+    Close the client immediately. Any ongoing requests will be aborted. Callbacks
+    for those requests are not called.
 
 **`void WaitForFinish()`**
 
-Puts the calling thread on hold until the worker-thread in the client is
-stopped. Can be used from an applications main thread after `CloseWhenFinished()`
-is called to keep the application alive until all requests are finished.
+    Puts the calling thread on hold until the worker-thread in the client is
+    stopped. Can be used from an applications main thread after `CloseWhenFinished()`
+    is called to keep the application alive until all requests are finished.
 
 **`bool HaveWorker()`**
 
-Returns true if the client have a worker-thread.
+    Returns true if the client have a worker-thread.
 
 **`size_t GetNumActiveRequests()`**
 
-Returns the current number of active requests. Queued requests are not
-counted here.
+    Returns the current number of active requests. Queued requests are not
+    counted here.
 
 ## The `RequestBuilder` class
 
