@@ -593,7 +593,7 @@ private:
                     tmp = std::move(queue_);
                     pending_entries_in_queue_ = false;
                 } else {
-                    auto remains = std::min(RESTINCURL_MAX_CONNECTIONS - ongoing_.size(), queue_.size());
+                    auto remains = std::min<size_t>(RESTINCURL_MAX_CONNECTIONS - ongoing_.size(), queue_.size());
                     if (remains) {
                         auto it = queue_.begin();
                         RESTINCURL_LOG_TRACE("Adding only " << remains << " of " << queue_.size()
