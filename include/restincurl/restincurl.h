@@ -26,6 +26,7 @@
     On Github: https://github.com/jgaa/RESTinCurl
 */
 
+#include <algorithm>
 #include <atomic>
 #include <deque>
 #include <exception>
@@ -42,11 +43,11 @@
 #include <assert.h>
 #include <curl/curl.h>
 #include <curl/easy.h>
+#include <fcntl.h>
 #include <string.h>
 #include <sys/select.h>
 #include <sys/time.h>
 #include <unistd.h>
-#include <fcntl.h>
 
 // Max concurrent connections
 #ifndef RESTINCURL_MAX_CONNECTIONS
