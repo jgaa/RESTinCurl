@@ -30,21 +30,14 @@ STARTCASE(TestSimpleGet)
 {
     restincurl::Client client;
 
-    string data;
-
-    restincurl::InDataHandler<std::string> data_handler(data);
-
     bool callback_called = false;
     client.Build()->Get("http://localhost:3001/normal/manyposts")
-        //.Option(CURLOPT_VERBOSE, 1L)
         .AcceptJson()
-        //.StoreData(data_handler)
-        .StoreData(data)
         .Header("X-Client", "restincurl")
         .WithCompletion([&](const Result& result) {
             EXPECT(result.curl_code == CURLE_OK);
             EXPECT(result.http_response_code == 200);
-            EXPECT(!data.empty());
+            EXPECT(!result.body.empty());
             callback_called = true;
         })
         .Execute();
@@ -56,6 +49,32 @@ STARTCASE(TestSimpleGet)
     EXPECT(callback_called);
 
 } ENDCASE
+
+
+STARTCASE(TestGetWithBasicAuthentication)
+{
+    restincurl::Client client;
+
+    bool callback_called = false;
+    client.Build()->Get("http://localhost:3001/restricted/posts/1")
+        .AcceptJson()
+        .BasicAuthentication("alice", "12345")
+        .WithCompletion([&](const Result& result) {
+            EXPECT(result.curl_code == CURLE_OK);
+            EXPECT(result.http_response_code == 200);
+            EXPECT(!result.body.empty());
+            callback_called = true;
+        })
+        .Execute();
+
+#if RESTINCURL_ENABLE_ASYNC
+    client.CloseWhenFinished();
+    client.WaitForFinish();
+#endif
+    EXPECT(callback_called);
+
+} ENDCASE
+
 
 STARTCASE(TestSimpleGetWithHttps)
 {

@@ -15,15 +15,14 @@ using namespace restincurl;
 int main( int argc, char * argv[]) {
 
     restincurl::Client client;
-    string data;
 
     client.Build()->Get("http://localhost:3001/normal/posts")
         .AcceptJson()
-        .StoreData(data)
         .Header("X-Client", "restincurl")
         .Trace()
         .WithCompletion([&](const Result& result) {
             clog << "In callback! HTTP result code was " << result.http_response_code << endl;
+            clog << "Data was " << result.body.size() << " bytes." << endl;
         })
         .Execute();
 

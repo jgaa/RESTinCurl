@@ -159,6 +159,7 @@ private:
         CURLcode curl_code = {};
         long http_response_code = {};
         std::string msg;
+        std::string body;
     };
 
     enum class RequestType { GET, PUT, POST, HEAD, DELETE, PATCH, OPTIONS, INVALID };
@@ -258,7 +259,7 @@ private:
 
         static size_t write_callback(char *ptr, size_t size, size_t nitems, void *userdata) {
             assert(userdata);
-            InDataHandler *self = reinterpret_cast<InDataHandler *>(userdata);
+            auto self = reinterpret_cast<InDataHandler *>(userdata);
             const auto bytes = size * nitems;
             if (bytes > 0) {
                 std::copy(ptr, ptr + bytes, std::back_inserter(self->data_));
@@ -345,6 +346,10 @@ private:
             return headers_;
         }
 
+        std::string& getDefaultInBuffer() {
+            return default_data_buffer_;
+        }
+
     private:
         void CallCompletion(CURLcode cc) {
             Result result(cc);
@@ -353,6 +358,9 @@ private:
                                &result.http_response_code);
             RESTINCURL_LOG("Complete: http code: " << result.http_response_code);
             if (completion_) {
+                if (!default_data_buffer_.empty()) {
+                    result.body = std::move(default_data_buffer_);
+                }
                 completion_(result);
             }
         }
@@ -395,6 +403,7 @@ private:
         std::unique_ptr<DataHandlerBase> default_out_handler_;
         std::unique_ptr<DataHandlerBase> default_in_handler_;
         headers_t headers_ = nullptr;
+        std::string default_data_buffer_;
     };
 
 #if RESTINCURL_ENABLE_ASYNC
@@ -992,9 +1001,45 @@ private:
             return StoreData(handler_ref);
         }
 
+        /*! Do not process incoming data
+         *
+         * The response body will be read from the network, but
+         * not buffered and not available for later
+         * inspection.
+         */
+        RequestBuilder& IgnoreIncomingData() {
+            options_->Set(CURLOPT_WRITEFUNCTION, write_callback);
+            have_data_in_ = true;
+            return *this;
+        }
+
         RequestBuilder& WithCompletion(completion_fn_t fn) {
             assert(!is_built_);
             completion_ = std::move(fn);
+            return *this;
+        }
+
+        /*! HTTP Basic Authentication
+         *
+         * Authenticate the request with HTTP Basic Authentication.
+         *
+         * @param name Name to authenticate with
+         * @param passwd Password to authenticate with
+         *
+         * Note that if name or password is empty, authentication is
+         * ignored. This makes it simple to add optional authentication
+         * to your project, by simply assigning values to the strings
+         * you pass here, or not.
+         */
+        RequestBuilder& BasicAuthentication(const std::string& name,
+                                            const std::string& passwd) {
+            assert(!is_built_);
+
+            if (!name.empty() && !passwd.empty()) {
+                options_->Set(CURLOPT_USERNAME, name.c_str());
+                options_->Set(CURLOPT_PASSWORD, passwd.c_str());
+            }
+
             return *this;
         }
 
@@ -1018,7 +1063,8 @@ private:
             if (!is_built_) {
                 // Set up data handlers
                 if (!have_data_in_) {
-                    options_->Set(CURLOPT_WRITEFUNCTION, write_callback);
+                    // Use a default std::string. We expect json anyway...
+                    this->StoreData(request_->getDefaultInBuffer());
                 }
 
                 if (have_data_out_) {
