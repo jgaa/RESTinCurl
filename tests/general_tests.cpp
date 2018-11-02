@@ -50,6 +50,31 @@ STARTCASE(TestSimpleGet)
 
 } ENDCASE
 
+STARTCASE(TestGetNoData)
+{
+    restincurl::Client client;
+
+    bool callback_called = false;
+    client.Build()->Get("http://localhost:3001/normal/manyposts")
+        .AcceptJson()
+        .IgnoreIncomingData()
+        .Header("X-Client", "restincurl")
+        .WithCompletion([&](const Result& result) {
+            EXPECT(result.curl_code == CURLE_OK);
+            EXPECT(result.http_response_code == 200);
+            EXPECT(result.body.empty());
+            callback_called = true;
+        })
+        .Execute();
+
+#if RESTINCURL_ENABLE_ASYNC
+    client.CloseWhenFinished();
+    client.WaitForFinish();
+#endif
+    EXPECT(callback_called);
+
+} ENDCASE
+
 
 STARTCASE(TestGetWithBasicAuthentication)
 {
