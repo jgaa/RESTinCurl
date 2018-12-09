@@ -20,7 +20,7 @@ For desktop and server projects, I personally prefer the much more interesting [
 - Supports all standard HTTP request types.
 - Supports synchronous and asynchronous requests (using the same API).
 - Exposes a request-builder class to make it dead simple to express requests.
-- Flexible logging
+- Flexible logging.
 - Hides libcurl's awkward data callbacks and let's you work with std::string's in stead (if you want to).
 - Exposes all libcurl's options to you, via convenience methods, or directly.
 - Implements it's own asynchronous processing loop, and expose only a simple, modern, intuitive API to your code.
@@ -100,9 +100,7 @@ It's called from the UI thread and returns immediately. The lambda function body
 a worker-thread.
 
 ```C++
-void AccountImpl::getBalance(const std::string& tokenType,
-                    const secure_str_t& passphrase,
-                    IAccount::balance_callback_t callback) const {
+void AccountImpl::getBalance(IAccount::balance_callback_t callback) const {
 
 
         curl_.Build()->Get(getServerUrl())
