@@ -5,6 +5,10 @@ include(cmake_scripts/external-projects.cmake)
 
 message(STATUS "Using ${CMAKE_CXX_COMPILER}")
 
+if (NOT DEFINED WITH_APIDOC)
+    option(WITH_APIDOC "Generate Doxygen documentation")
+endif()
+
 macro(SET_CPP_STANDARD target)
     message(STATUS "Using C++ 14 for ${target}")
     set_property(TARGET ${target} PROPERTY CXX_STANDARD 14)
@@ -25,3 +29,4 @@ link_directories( ${CURL_LIBRARIES} )
 
 add_subdirectory(tests)
 
+include(cmake_scripts/doxygen.cmake)
