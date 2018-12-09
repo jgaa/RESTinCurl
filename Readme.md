@@ -87,8 +87,8 @@ instance. The worker-thread is started when the first request is made, and it wi
 terminated after a configurable timeout-period when the client is idle. 
 
 Asynchronous requests returns immediately, and an (optional) callback will be called when the 
-request finish (or fails). The callback is called from the worker-thread. The callback should
-return immediately and do any time-consuming processing in another thread. 
+request finish (or fails). The callback is called from the worker-thread. In the callback you should
+return immediately, and do any time-consuming processing in another thread. 
 
 Since all IO happens in the worker-thread, no data synchronization should normally be required, 
 leading to better performance and simpler code. 
