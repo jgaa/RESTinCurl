@@ -1,16 +1,38 @@
 # REST in Curl - Modern C++ header only library wrapper around libcurl
 
-C++ is fun. Boost::asio is lots of fun. Unfortunately, in some projects, they cannot be used without introducing great pain. That's why we need the *RESTinCurl* library.
+C++ is fun. Boost::asio is lots of fun. Unfortunately, in some projects, they cannot be used without introducing great pain. That's why we need 
+the [*RESTinCurl*](https://github.com/jgaa/RESTinCurl) library.
 For desktop and server projects, I personally prefer the much more interesting [restc-cpp](https://github.com/jgaa/restc-cpp) project.
 
-*RESTinCurl* is a very simple library that use the C library libcurl to perform HTTP client operations on web servers. It's targeting REST api's using HTTP and (probably) json. Restincurl does not provide json by itself. In our examples, we use the excellent [nlohmann/json](https://github.com/nlohmann/json) header only library.
+*RESTinCurl* is a very simple library that use the C library libcurl to perform HTTP client operations on web servers. It's targeting REST api's using HTTP and (probably) json. Restincurl does not provide json by itself. In my own projects, I use the excellent [nlohmann/json](https://github.com/nlohmann/json) header only library.
 
 ## Design Goals
 
-- We use libcurl to keep the code size and dependencies at a minimum (for mobile and iot). No boost libraries in this project.
+- We use libcurl to keep the code size and dependencies at a minimum (for mobile and IOT). No boost library dependencies.
 - IO must be asynchronous, allowing any realistic numbers of REST requests from a single worker thread.
 - We must be able to shut down immediately, killing the worker thread at any time and cleaning up.
 - The library must use resources in a sane way, and silently shut down the worker thread and curl connection pool when it has been idle for a while.
+- Utilize C++14 to keep simple things simple.
+
+## Features
+- Very simple to use. You don't need to understand the inner workings of libcurl to use RESTinCurl!
+- Limited use of C++ templates to keep the binary size down. The library is geared towards mobile/IOT use-cases.
+- Supports all standard HTTP request types.
+- Supports synchronous and asynchronous requests (using the same API).
+- Exposes a request-builder class to make it dead simple to express requests.
+- Flexible logging
+- Hides libcurl's awkward data callbacks and let's you work with std::string's in stead (if you want to).
+- Exposes all libcurl's options to you, via convenience methods, or directly.
+- Implements it's own asynchronous processing loop, and expose only a simple, modern, intuitive API to your code.
+- One instance use only one worker-thread. The thread is started on demand and stopped when the instance has been idle for a while.
+- Tuned towards REST/Json use-cases (but still usable for general/binary HTTP requests).
+
+## How to use it in your C++ project
+
+You can add it to you project as a git sub-module, download it as part of your
+projects build (from CMake or whatever magic you use), or you can just
+download the header and copy it to your project (if you copy it, you should
+pay attention to new releases in case there are any security fixes).
 
 ## How it works
 
@@ -21,66 +43,103 @@ You build a query, and a functor that gets called when the request finish (or fa
 Example:
 
 ```C++
+std::string name, passwd;
 restincurl::Client client;
-std::string data;
 client.Build()->Get("https://api.example.com/")
+    .BasicAuthentication(name, passwd)
     .AcceptJson()
-    .StoreData(data)
-    .Header("X-Client", "restincurl")
     .Trace()
-    .WithCompletion([&](const Result& result) {
-        clog << "In callback! HTTP result code was " << result.http_response_code << endl;
+    .WithCompletion([](const restincurl::Result& result) {
+        if (result.curl_code == 0 && result.http_response_code == 200) {
+            std::clog << "Fetched data: " << result.body << std::endl
+            // Do something
+        } else {
+            // Failed.
+            std::clog  << "Failed to fetch data. http code: " << result.http_response_code
+                << ", error reason: " << result.msg
+                << ", payload: " << result.body << std::endl;
+        }
     })
     .Execute();
+
 ```
 
-Here use `AcceptJson` to tell the server that we accept json payloads. We ask *RESTinCurl* to
-put whatever data that comes from the server to the string `data`. We add a header. We enable Tracing,
+We use `AcceptJson()` to tell the server that we accept json payloads. We use HTTP BasicAuthentication
+to access the REST API. We enable Tracing,
 which means that *RESTinCurl* will log verbose output of it's internal workings (if we enable logging).
 Then we provide a lambda function to be called when the request is done. And finally, we call
-`Execute` to send the request.
-
-An instance of `Client` contains a worker-thread that will handle all the clients requests. The processing
-is asynchronous, and due to libcurl's efficiency, we can work with thousands of concurrent requests in
-that thread.
+`Execute()` to send the request.
 
 ## Data
 
-*RESTinCurl* is a very thin wrapper over libcurl. When you set up a request that returns data, you need to
-supply a data-buffer for the data. For json payloads, a std::string is fine. Since the data-buffer must
-stay in scope until the asynchronous request is complete, I often use `std::shared_ptr<std::string>` types and
-capture an instance of the `shared_ptr` in the lambda. That way I don't have to further track the lifetime of the
-data-buffer in code.
+*RESTinCurl* is a very thin wrapper over libcurl. Libcurl reads and writes payload data from / to
+C callback functions while serving a request. That gives a lot of flexibility, but it's a bit awkward
+to implement. RESTinCurl gives you full flexibility in that you can use the C API for this, by providing
+your own callback functions, you can use a C++ template abstraction that reads/writes to a container, 
+or you can simply use std::string buffers. For json payloads, strings are perfect, and RESTinCurl 
+provides a very simple and intuitive interface. 
+
+## Threading model
+
+In asynchronous mode (the default mode of operation), each instance of a Client class will
+start one worker-thread that will deal with all concurrent requests performed by that
+instance. The worker-thread is started when the first request is made, and it will be
+terminated after a configurable timeout-period when the client is idle. 
+
+Asynchronous requests returns immediately, and an (optional) callback will be called when the 
+request finish (or fails). The callback is called from the worker-thread. The callback should
+return immediately and do any time-consuming processing in another thread. 
+
+Since all IO happens in the worker-thread, no data synchronization should normally be required, 
+leading to better performance and simpler code. 
 
 ## Example from a real app
 
 Here is a method called when a user click on a button in an IOS or Android app using this library.
-It's called from the UI thread and returns immediately. When the request is finished, the
-callback supplied to `getBalance` is called.
+It's called from the UI thread and returns immediately. The lambda function body is called from 
+a worker-thread.
 
 ```C++
-void AccountImpl::getBalance(balance_callback_t callback) const {
-    const auto address = getAddress();
-    const string url = get_rest_url() + "api.v.1.0/balance?address="s + address;
-    auto data = make_shared<string>(); // We get the body from the rest request here
-    curl_.Build()->Get(url)
-        .Trace(true)
-        .Option(CURLOPT_SSL_VERIFYPEER, 0L)
-        .StoreData(*data)
-        .AcceptJson()
-        .WithCompletion([this, data, callback](const restincurl::Result& result) {
-            if (result.curl_code == 0 && result.http_response_code == 200) {
-                LFLOG_IFALL_DEBUG("Fetched balance: " << *data);
-                callback(*data, {});
-            } else {
-                // Failed.
-                LFLOG_IFALL_DEBUG("Failed to fetch balance: " << *data);
-                callback({}, result));
-            }
-        })
-        .Execute();
-}
+void AccountImpl::getBalance(const std::string& tokenType,
+                    const secure_str_t& passphrase,
+                    IAccount::balance_callback_t callback) const {
+
+
+        curl_.Build()->Get(getServerUrl())
+            .BasicAuthentication(getHttpAuthName(), getHttpAuthPasswd())
+            .Trace(APP_CURL_VERBOSE)
+            .Option(CURLOPT_SSL_VERIFYPEER, 0L)
+            .AcceptJson()
+            .WithCompletion([this, callback](const restincurl::Result& result) {
+                if (result.curl_code == 0 && result.http_response_code == 200) {
+                    LFLOG_IFALL_DEBUG("Fetched balance: " << result.body);
+                    if (callback) {
+                        LFLOG_IFALL_DEBUG("Calling callback");
+                        callback(result.body, {});
+                        LFLOG_IFALL_DEBUG("Callback was called OK");
+                    } else {
+                        LFLOG_ERROR << "No callback to call";
+                    }
+                } else {
+                    // Failed.
+                    LFLOG_ERROR << "Failed to fetch balance. http code: " << result.http_response_code
+                        << ", error reason: " << result.msg
+                        << ", payload: " << result.body;
+                    if (callback) {
+                        LFLOG_IFALL_DEBUG("Calling callback");
+                        callback({}, assign(result, result.body));
+                        LFLOG_IFALL_DEBUG("Callback was called OK");
+                    } else {
+                        LFLOG_ERROR << "No callback to call";
+                    }
+                    return;
+                }
+            })
+            .Execute();
+    }
 ```
+
+The code above use the [logfault](https://github.com/jgaa/logfault) C++ header only log-library.
 
 ## More examples
 
@@ -90,23 +149,39 @@ The [test-cases](tests/general_tests.cpp) shows most of the features in use.
 
 ## Logging
 
-Use these macros to enable logging:
+Logging is essential for debugging applications. For normal applications, you can normally
+get away with logging to standard output or standard error. On mobile, things are little more
+involved. Android has it's own weird logging library for NDK projects, and IOS has it's own 
+logging methods that are not even exposed to C++! 
 
-- **`RESTINCURL_ENABLE_DEFAULT_LOGGER`** Log to `std::clog`
-- **`RESTINCURL_USE_SYSLOG`** Log to syslog (Linux / Unix)
+RESTinCurl has a very simple logging feature that can write logs to std::clog, syslog or 
+Android's `__android_log_write()`. It may be all you need to debug your REST requests. 
 
-If you use [logfault](https://github.com/jgaa/logfault), you may find this code useful:
+Just `#define RESTINCURL_ENABLE_DEFAULT_LOGGER 1` to enable it.
 
-```C++
-#define RESTINCURL_LOG(msg) LFLOG_IFALL_TRACE("restincurl: " << msg)
-#include "restincurl/restincurl.h"
-```
+If you want to use the Android NDK logger, `#define RESTINCURL_USE_ANDROID_NDK_LOG`. 
+
+
+**Logfault**
+
+If you want full support for log files, IOS/Macos logging, Android, Syslog etc, you can 
+get the [logfault](https://github.com/jgaa/logfault) C++ header only log-library, and 
+`#include "logfault/logfault.h"` before you `#include "restincurl/restincurl.h"`. 
+RESTinCurl will detect that you use logfault and adapt automatically. 
+
+**Other log libraries**
+
+RESTinCurl use two macros, `RESTINCURL_LOG(...)` and `RESTINCURL_LOG_TRACE(...)` to generate log
+content. If you use another log library, or your own logging functions, you can define those two
+macros to fit your needs. You can examine the code for the default implementation in `restincurl.h`
+to see how that can be done. Hint: It's simple. 
 
 ## Todo's
 - [ ] Ensure thread safety with OpenSSL
 - [x] Make some sort of timer, so that we clean up and stop the thread after #time
 - [x] Make sure connection re-use it utilized
 - [x] Queue new requests if we reach RESTINCURL_MAX_CONNECTIONS concurrent connections
-- [ ] Write complete documentation
+- [x] Write complete documentation
+- [ ] Write tutorial
 - [ ] Test cases for non-async mode (RESTINCURL_ENABLE_ASYNC=0)
 
