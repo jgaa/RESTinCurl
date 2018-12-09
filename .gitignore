@@ -1,5 +1,16 @@
-# Prerequisites
-*.d
+.kdev4
+build
+?build
+/cmake-build-*/
+generated-doc
+*/*.rej
+include/restc-cpp/config.h
+lib
+*.kdev4
+/.idea/
+/.vs/
+
+
 
 # Compiled Object files
 *.slo
@@ -18,7 +29,6 @@
 
 # Fortran module files
 *.mod
-*.smod
 
 # Compiled Static libraries
 *.lai
@@ -30,3 +40,4 @@
 *.exe
 *.out
 *.app
+
