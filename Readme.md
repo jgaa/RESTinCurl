@@ -157,7 +157,9 @@ Android's `__android_log_write()`. It may be all you need to debug your REST req
 
 Just `#define RESTINCURL_ENABLE_DEFAULT_LOGGER 1` to enable it.
 
-If you want to use the Android NDK logger, `#define RESTINCURL_USE_ANDROID_NDK_LOG`. 
+If you want to use the Android NDK logger, also `#define RESTINCURL_USE_ANDROID_NDK_LOG`. 
+
+If you want to use syslog, also `#define RESTINCURL_USE_SYSLOG`.
 
 
 **Logfault**
