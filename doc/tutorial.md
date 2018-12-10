@@ -106,7 +106,7 @@ Note that the only difference in the request is that we called `RequestBuilder::
 stead of `RequestBuilder::ExecuteSynchronous()`.
 
 Then at the end of the file we have two statements to stop the event-loop in Client,
-and to wait for the Client to finish up. Since out test program don't have it's own
+and to wait for the Client to finish up. Since our test program don't have it's own
 event-loop (unlike most desktop and mobile applications) we need to make sure the 
 curl client don't go out of scope while it's still active.
 

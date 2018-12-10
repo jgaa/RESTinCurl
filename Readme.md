@@ -182,6 +182,10 @@ to see how that can be done. Hint: It's simple.
 - [x] Make sure connection re-use it utilized
 - [x] Queue new requests if we reach RESTINCURL_MAX_CONNECTIONS concurrent connections
 - [x] Write complete documentation
-- [ ] Write tutorial
-- [ ] Test cases for non-async mode (RESTINCURL_ENABLE_ASYNC=0)
+- [x] Write tutorial
+- [x] Test cases for non-async mode (RESTINCURL_ENABLE_ASYNC=0)
 
+
+## Further reading
+
+- You may want to look at the [tutorial](https://github.com/jgaa/RESTinCurl/blob/master/doc/tutorial.md)
