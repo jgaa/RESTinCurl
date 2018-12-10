@@ -35,3 +35,38 @@ target_link_libraries(app_test
     ${DEFAULT_LIBRARIES}
 )
 ADD_AND_RUN_UNITTEST(APP_TEST app_test)
+
+add_executable(example1 example1.cpp)
+add_dependencies(example1 externalJson externalLog)
+target_link_libraries(example1
+    ${DEFAULT_LIBRARIES}
+)
+ADD_AND_RUN_UNITTEST(EXAMPLE1 example1)
+
+add_executable(example2 example2.cpp)
+add_dependencies(example2 externalJson externalLog)
+target_link_libraries(example2
+    ${DEFAULT_LIBRARIES}
+)
+ADD_AND_RUN_UNITTEST(EXAMPLE2 example2)
+
+add_executable(example3 example3.cpp)
+add_dependencies(example3 externalJson externalLog)
+target_link_libraries(example3
+    ${DEFAULT_LIBRARIES}
+)
+ADD_AND_RUN_UNITTEST(EXAMPLE3 example3)
+
+add_executable(example4 example4.cpp)
+add_dependencies(example4 externalJson externalLog)
+target_link_libraries(example4
+    ${DEFAULT_LIBRARIES}
+)
+ADD_AND_RUN_UNITTEST(EXAMPLE4 example4)
+
+add_executable(example5 example5.cpp)
+add_dependencies(example5 externalJson externalLog)
+target_link_libraries(example5
+    ${DEFAULT_LIBRARIES}
+)
+ADD_AND_RUN_UNITTEST(EXAMPLE5 example5)

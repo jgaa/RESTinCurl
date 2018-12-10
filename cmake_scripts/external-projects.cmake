@@ -15,7 +15,33 @@ ExternalProject_Add(
     LOG_DOWNLOAD ON
     LOG_INSTALL ON
     )
+    
+ExternalProject_Add(
+    externalJson
+    PREFIX "${EXTERNAL_PROJECTS_PREFIX}"
+    GIT_REPOSITORY "https://github.com/nlohmann/json.git"
+    GIT_TAG "master"
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND ""
+    INSTALL_COMMAND ""
+    LOG_DOWNLOAD ON
+    LOG_INSTALL ON
+    )
 
+ExternalProject_Add(
+    externalLog
+    PREFIX "${EXTERNAL_PROJECTS_PREFIX}"
+    GIT_REPOSITORY "https://github.com/jgaa/logfault.git"
+    GIT_TAG "master"
+    CONFIGURE_COMMAND ""
+    BUILD_COMMAND ""
+    INSTALL_COMMAND ""
+    LOG_DOWNLOAD ON
+    LOG_INSTALL ON
+    )
+    
 include_directories(
      ${EXTERNAL_PROJECTS_PREFIX}/src/externalLest/include/
+     ${EXTERNAL_PROJECTS_PREFIX}/src/externalJson/include/
+     ${EXTERNAL_PROJECTS_PREFIX}/src/externalLog/include/
     )
