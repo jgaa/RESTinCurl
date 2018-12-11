@@ -52,32 +52,14 @@ You build a query, and a functor that gets called when the request finish (or fa
 Example:
 
 ```C++
-std::string name, passwd;
 restincurl::Client client;
 client.Build()->Get("https://api.example.com/")
-    .BasicAuthentication(name, passwd)
-    .AcceptJson()
-    .Trace()
     .WithCompletion([](const restincurl::Result& result) {
-        if (result.curl_code == 0 && result.http_response_code == 200) {
-            std::clog << "Fetched data: " << result.body << std::endl
-            // Do something
-        } else {
-            // Failed.
-            std::clog  << "Failed to fetch data. http code: " << result.http_response_code
-                << ", error reason: " << result.msg
-                << ", payload: " << result.body << std::endl;
-        }
+       std::clog << "It works!" << std::endl;
     })
     .Execute();
 
 ```
-
-We use `AcceptJson()` to tell the server that we accept json payloads. We use HTTP BasicAuthentication
-to access the REST API. We enable Tracing,
-which means that *RESTinCurl* will log verbose output of it's internal workings (if we enable logging).
-Then we provide a lambda function to be called when the request is done. And finally, we call
-`Execute()` to send the request.
 
 ## Data
 
