@@ -23,7 +23,7 @@ For desktop and server projects, I personally prefer the much more interesting [
 - Flexible logging.
 - Hides libcurl's awkward data callbacks and let's you work with std::string's in stead (if you want to).
 - Exposes all libcurl's options to you, via convenience methods, or directly.
-- Implements it's own asynchronous processing loop, and expose only a simple, modern, intuitive API to your code.
+- Implements it's own asynchronous event-loop, and expose only a simple, modern, intuitive API to your code.
 - One instance use only one worker-thread. The thread is started on demand and stopped when the instance has been idle for a while.
 - Tuned towards REST/Json use-cases (but still usable for general/binary HTTP requests).
 
@@ -33,6 +33,15 @@ You can add it to you project as a git sub-module, download it as part of your
 projects build (from CMake or whatever magic you use), or you can just
 download the header and copy it to your project (if you copy it, you should
 pay attention to new releases in case there are any security fixes).
+
+The project have a `CMakeLists.txt`. This used to build and run the tests
+with cmake . It's not required in order to use the library. All yo need to do
+is to include the header-file.
+
+## External dependencies
+
+- the C++14 standard library
+- libcurl
 
 ## How it works
 
