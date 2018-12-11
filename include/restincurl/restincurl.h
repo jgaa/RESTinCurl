@@ -1482,6 +1482,10 @@ private:
         }
 
 #if RESTINCURL_ENABLE_ASYNC
+        /*! Shut down the event-loop and clean up internal resources when all active and queued requests are done.
+         * 
+         * This method is only available when `RESTINCURL_ENABLE_ASYNC` is nonzero.
+         */
         void CloseWhenFinished() {
             worker_->CloseWhenFinished();
         }
