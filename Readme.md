@@ -47,7 +47,7 @@ is to include the header-file.
 
 Using *RESTinCurl* is simple.
 
-You build a query, and privide a functor that gets called when the request finish (or fail).
+You build a query, and provide a functor that gets called when the request finish (or fail).
 
 Example:
 
