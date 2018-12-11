@@ -92,8 +92,6 @@ a worker-thread.
 
 ```C++
 void AccountImpl::getBalance(IAccount::balance_callback_t callback) const {
-
-
         curl_.Build()->Get(getServerUrl())
             .BasicAuthentication(getHttpAuthName(), getHttpAuthPasswd())
             .Trace(APP_CURL_VERBOSE)
