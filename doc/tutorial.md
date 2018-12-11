@@ -17,7 +17,7 @@ using namespace restincurl;
 int main( int argc, char * argv[]) {
 
     // Construct an instance of the curl Client
-    restincurl::Client client;
+    Client client;
 
     // Get a RequestBuilder instance by calling Build(), and specify that we 
     // will require a GET request by calling RequestBuilder::Get()
@@ -67,7 +67,7 @@ using namespace restincurl;
 int main( int argc, char * argv[]) {
 
     // Construct the curl Client
-    restincurl::Client client;
+    Client client;
 
     // Get a RequestBuilder by calling Build() and specify that we 
     // will require a GET request by calling RequestBuilder::Get()
@@ -122,7 +122,7 @@ using namespace restincurl;
 
 int main( int argc, char * argv[]) {
     
-    restincurl::Client client;
+    Client client;
 
     for(auto i = 0; i < 10; i++) {
         client.Build()->Get("https://google.com")
@@ -198,7 +198,7 @@ int main( int argc, char * argv[]) {
     LogManager::Instance().AddHandler(
         make_unique<StreamHandler>(clog, LogLevel::DEBUGGING));
 
-    restincurl::Client client;
+    Client client;
 
     for(auto i = 0; i < 10; i++) {
         client.Build()->Get("https://google.com")
@@ -308,7 +308,7 @@ int main( int argc, char * argv[]) {
     LogManager::Instance().AddHandler(
         make_unique<StreamHandler>(clog, logfault::LogLevel::TRACE));
 
-    restincurl::Client client;
+    Client client;
 
     client.Build()->Get("http://jsonplaceholder.typicode.com/posts")
     
@@ -363,7 +363,7 @@ The output may look something like:
 2018-12-10 10:23:30.971 EET DEBUGGING 140499094296320 restincurl: Starting thread 140499094296320
 2018-12-10 10:23:31.097 EET DEBUGGING 140499094296320 restincurl: Finishing request with easy-handle: 0x55d7c51c2010; with result: 0 expl: 'No error'; with msg: 1
 2018-12-10 10:23:31.097 EET DEBUGGING 140499094296320 restincurl: Complete: http code: 200
-2018-12-10 10:23:31.100 EET INFO 140499094296320 We reveived 100 records.
+2018-12-10 10:23:31.100 EET INFO 140499094296320 We received 100 records.
 2018-12-10 10:23:31.100 EET INFO 140499094296320   -> 1 sunt aut facere repellat provident occaecati excepturi optio reprehenderit
 2018-12-10 10:23:31.100 EET INFO 140499094296320   -> 2 qui est esse
 2018-12-10 10:23:31.100 EET INFO 140499094296320   -> 3 ea molestias quasi exercitationem repellat qui ipsa sit aut

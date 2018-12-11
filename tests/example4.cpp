@@ -14,7 +14,7 @@ int main( int argc, char * argv[]) {
     LogManager::Instance().AddHandler(
         make_unique<StreamHandler>(clog, LogLevel::DEBUGGING));
 
-    restincurl::Client client;
+    Client client;
 
     for(auto i = 0; i < 10; i++) {
         client.Build()->Get("https://google.com")

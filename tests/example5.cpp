@@ -15,9 +15,9 @@ int main( int argc, char * argv[]) {
 
      // Use logfault for logging and log to std::clog on DEBUG level
     LogManager::Instance().AddHandler(
-        make_unique<StreamHandler>(clog, logfault::LogLevel::TRACE));
+        make_unique<StreamHandler>(clog, logfault::LogLevel::DEBUGGING));
 
-    restincurl::Client client;
+    Client client;
 
     client.Build()->Get("http://jsonplaceholder.typicode.com/posts")
     

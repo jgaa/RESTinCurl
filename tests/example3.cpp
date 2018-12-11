@@ -8,7 +8,7 @@ using namespace restincurl;
 
 int main( int argc, char * argv[]) {
     
-    restincurl::Client client;
+    Client client;
 
     for(auto i = 0; i < 10; i++) {
         client.Build()->Get("https://google.com")

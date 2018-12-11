@@ -7,7 +7,7 @@ using namespace restincurl;
 int main( int argc, char * argv[]) {
 
     // Construct the curl Client
-    restincurl::Client client;
+    Client client;
 
     // Get a RequestBuilder by calling Build() and specify that we 
     // will require a GET request by calling RequestBuilder::Get()
