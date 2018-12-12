@@ -1,6 +1,4 @@
 
-enable_testing()
-
 macro (ADD_AND_RUN_UNITTEST testname targetname)
 SET_CPP_STANDARD(${targetname})
 add_test(NAME ${testname} COMMAND ${targetname})
@@ -70,3 +68,10 @@ target_link_libraries(example5
     ${DEFAULT_LIBRARIES}
 )
 ADD_AND_RUN_UNITTEST(EXAMPLE5 example5)
+
+add_executable(example6 example6.cpp)
+add_dependencies(example6 externalJson externalLog)
+target_link_libraries(example6
+    ${DEFAULT_LIBRARIES}
+)
+ADD_AND_RUN_UNITTEST(EXAMPLE6 example6)

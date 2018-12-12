@@ -238,6 +238,17 @@ private:
             curl_code = code;
             msg = curl_easy_strerror(code);
         }
+        
+        /*! Check if the reqtest appears to be successful */
+        bool isOk() const noexcept {
+            if (curl_code == CURLE_OK) {
+                if ((http_response_code >= 200) && (http_response_code < 300)) {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
 
         /*! The CURLcode returned by libcurl for this request.
          * 
@@ -1104,6 +1115,15 @@ private:
         /*! Sets the content-type to "Application/json; charset=utf-8" */
         RequestBuilder& WithJson() {
             return Header("Content-type: Application/json; charset=utf-8");
+        }
+        
+        /*! Sets the content-type to "Application/json; charset=utf-8"
+         * 
+         * \param body Json payload to send with the request. 
+        */
+        RequestBuilder& WithJson(std::string body) {
+            WithJson();
+            return SendData(std::move(body));
         }
 
         /*! Sets the accept header to "Application/json" */

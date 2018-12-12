@@ -288,7 +288,10 @@ The data returned will look like this (just that there will be more records):
 ]
 ```
 
+
 So, let's query this REST API and process the received data.
+
+**Get an array of Json objects**
 
 ```C++
 // Include before restincurl.h
@@ -378,5 +381,104 @@ The output may look something like:
 2018-12-10 10:23:31.103 EET DEBUGGING 140499094296320 restincurl: Cleaning easy-handle 0x55d7c51c2010
 2018-12-10 10:23:31.103 EET DEBUGGING 140499094296320 restincurl: Exiting thread 140499094296320
 
+```
+
+Now, lets try to POST a Json objec.
+
+**POST a Json object**
+
+```C++
+
+
+// Include before restincurl.h
+#include "logfault/logfault.h"
+
+#include "restincurl/restincurl.h"
+#include "nlohmann/json.hpp"
+
+using namespace std;
+using namespace restincurl;
+using namespace logfault;
+using namespace nlohmann;
+
+int main( int argc, char * argv[]) {
+
+     // Use logfault for logging and log to std::clog on DEBUG level
+    LogManager::Instance().AddHandler(
+        make_unique<StreamHandler>(clog, logfault::LogLevel::DEBUGGING));
+
+    // Create some data
+    json j;
+    j["title"] = "Dolphins";
+    j["body"] = "Thanks for all the fish";
+    j["answer"] = 42;
+    j["interperation"] = "Unknown in this universe";
+    
+    Client client;
+    client.Build()->Post("http://jsonplaceholder.typicode.com/posts")
+    
+        // Tell the server that we accept Json payloads
+        .AcceptJson()
+        
+        // Tell the server that we have a Json body, and 
+        // hand that body to the request.
+        // json::dump() will serialize the data in j as a Json string.
+        .WithJson(j.dump())
+        
+        // Call this lambda when the request is done
+        .WithCompletion([&](const Result& result) {
+            
+            // Check if the request was successful
+            if (result.isOk()) {
+                LFLOG_DEBUG << "Returned body was " << result.body;
+                try {
+                    
+                    // Parse the response body we got as Json.
+                    const auto j = json::parse(result.body);
+                    
+                    // We expect to get an id for the object we just sent
+                    LFLOG_DEBUG << "The object was assigned id " << j["id"].get<int>();
+                    
+                } catch (const std::exception& ex) {
+                    LFLOG_ERROR << "Caught exception: " << ex.what();
+                    return;
+                }
+                
+            } else {
+                LFLOG_ERROR << "Request failed: " << result.msg << endl
+                    << "HTTP code: " << result.http_response_code << endl;
+            }
+        })
+        .Execute();
+
+        
+    client.CloseWhenFinished();
+    client.WaitForFinish();
+    
+    // Done
+}
+```
+
+Here we send a Json object to the server, and we return and use
+a Json reply.
+
+The output may look like:
+```
+2018-12-12 10:25:00.383 EET DEBUGGING 140503224969600 restincurl: One time initialization of curl.
+2018-12-12 10:25:00.387 EET DEBUGGING 140503224969600 restincurl: EasyHandle created: 0x564fa19662b0
+2018-12-12 10:25:00.387 EET DEBUGGING 140503224969600 restincurl: Preparing connect to: http://jsonplaceholder.typicode.com/posts
+2018-12-12 10:25:00.388 EET DEBUGGING 140503224964864 restincurl: Starting thread 140503224964864
+2018-12-12 10:25:00.826 EET DEBUGGING 140503224964864 restincurl: Finishing request with easy-handle: 0x564fa19662b0; with result: 0 expl: 'No error'; with msg: 1
+2018-12-12 10:25:00.826 EET DEBUGGING 140503224964864 restincurl: Complete: http code: 201
+2018-12-12 10:25:00.826 EET DEBUGGING 140503224964864 Returned body was {
+  "answer": 42,
+  "body": "Thanks for all the fish",
+  "interperation": "Unknown in this universe",
+  "title": "Dolphins",
+  "id": 101
+}
+2018-12-12 10:25:00.826 EET DEBUGGING 140503224964864 The object was assigned id 101
+2018-12-12 10:25:00.826 EET DEBUGGING 140503224964864 restincurl: Cleaning easy-handle 0x564fa19662b0
+2018-12-12 10:25:00.826 EET DEBUGGING 140503224964864 restincurl: Exiting thread 140503224964864
 ```
 

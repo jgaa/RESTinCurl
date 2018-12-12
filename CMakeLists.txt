@@ -27,6 +27,7 @@ include_directories(
 
 link_directories( ${CURL_LIBRARIES} )
 
+enable_testing()
 add_subdirectory(tests)
 
 include(cmake_scripts/doxygen.cmake)
