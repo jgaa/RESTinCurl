@@ -75,3 +75,10 @@ target_link_libraries(example6
     ${DEFAULT_LIBRARIES}
 )
 ADD_AND_RUN_UNITTEST(EXAMPLE6 example6)
+
+add_executable(example7 example7.cpp)
+add_dependencies(example7 externalJson externalLog)
+target_link_libraries(example7
+    ${DEFAULT_LIBRARIES}
+)
+ADD_AND_RUN_UNITTEST(EXAMPLE7 example7)
