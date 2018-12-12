@@ -173,6 +173,8 @@ to see how that can be done. Hint: It's simple.
 - [x] Write complete documentation
 - [x] Write tutorial
 - [x] Test cases for non-async mode (RESTINCURL_ENABLE_ASYNC=0)
+- [ ] CloseWhenFinished() must allow new requests to enter the queue and to be completed
+- [ ] Verify that DELETE is implemented coirrectly.
 
 
 ## Further reading
