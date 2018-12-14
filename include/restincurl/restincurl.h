@@ -51,6 +51,10 @@
 #include <sys/time.h>
 #include <unistd.h>
 
+#ifdef RESTINCURL_WITH_OPENSSL_THREADS
+#   include <openssl/crypto.h>
+#endif
+
 /*! \def RESTINCURL_MAX_CONNECTIONS
  * \brief Max concurrent connections
  * 
@@ -609,7 +613,84 @@ private:
     private:
         pipefd_t pipefd_;
     };
+    
+    /*! Thread support for the TLS layer used by libcurl.
+     * 
+     * Some TLS libraries require that you supply callback functions
+     * to deal with thread synchronization.
+     * 
+     * See https://curl.haxx.se/libcurl/c/threadsafe.html
+     * 
+     * You can deal with this yourself, or in the case
+     * that RESTinCurl support your TLS library, you can use
+     * this class.
+     * 
+     * Currently supported libraries:
+     * 
+     *  - Opeenssl (only required for OpenSSL <= 1.0.2) 
+     *      define `RESTINCURL_WITH_OPENSSL_THREADS`
+     * 
+     * The class is written so that you can use it in your code, and
+     * it will only do something when the appropriate define is set.
+     * 
+     * This class is only available when `RESTINCURL_ENABLE_ASYNC` is nonzero.
+     */
+    class TlsLocker 
+    {
+    public:
+        
+#ifdef RESTINCURL_WITH_OPENSSL_THREADS 
+    static void opensslLockCb(int mode, int type, char *, int) {
+        if(mode & CRYPTO_LOCK) {
+           lock();
+        }
+        else {
+           unlock();
+        }
+    }
+    
+    static unsigned long getThreadId(void) {
+        return reinterpret_cast<unsigned long>(::this_thread::get_id());
+    }
+    
+    /*! Enable the built-in support. */
+    static void tlsLockInit() {
+        CRYPTO_set_id_callback((unsigned long (*)())getThreadId);
+        CRYPTO_set_locking_callback((void (*)())opensslLockCb);
+    }
+    
+    /*! Free up resources used when finished using TLS. */
+    static void tlsLockKill() {
+        CRYPTO_set_locking_callback(NULL);
+    }
+    
+#else
+    /*! Enable the built-in support. */
+    static void tlsLOckInit() {
+        ; // Do nothing
+    }
+    
+    /*! Free up resources used when finished using TLS. */
+    static void tlsLockKill() {
+        ; // Do nothing
+    }
+#endif
 
+
+    
+
+    private:
+        static void lock() {
+            mutex_.lock();
+        }
+        
+        static void unlock() {
+            mutex_.unlock();
+        }
+        
+        static std::mutex mutex_;
+    };
+    
     class Worker {
         class WorkerThread {
         public:
