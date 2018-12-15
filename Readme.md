@@ -166,7 +166,8 @@ macros to fit your needs. You can examine the code for the default implementatio
 to see how that can be done. Hint: It's simple. 
 
 ## Todo's
-- [ ] Ensure thread safety with OpenSSL
+- [x] Ensure thread safety with OpenSSL
+- [ ] Validate OpenSSL therad safety
 - [x] Make some sort of timer, so that we clean up and stop the thread after #time
 - [x] Make sure connection re-use it utilized
 - [x] Queue new requests if we reach RESTINCURL_MAX_CONNECTIONS concurrent connections
@@ -174,7 +175,8 @@ to see how that can be done. Hint: It's simple.
 - [x] Write tutorial
 - [x] Test cases for non-async mode (RESTINCURL_ENABLE_ASYNC=0)
 - [ ] CloseWhenFinished() must allow new requests to enter the queue and to be completed
-- [ ] Verify that DELETE is implemented coirrectly.
+- [ ] Verify that DELETE is implemented correctly.
+- [ ] Add correctly encoded query parameters from the RequestBuilder
 
 
 ## Further reading
