@@ -15,6 +15,7 @@ For desktop and server projects, I personally prefer the much more interesting [
 - Utilize C++14 to keep simple things simple.
 
 ## Features
+
 - Very simple to use. You don't need to understand the inner workings of libcurl to use RESTinCurl!
 - Limited use of C++ templates to keep the binary size down. The library is geared towards mobile/IOT use-cases.
 - Supports all standard HTTP request types.
@@ -177,6 +178,10 @@ to see how that can be done. Hint: It's simple.
 - [ ] CloseWhenFinished() must allow new requests to enter the queue and to be completed
 - [ ] Verify that DELETE is implemented correctly.
 - [ ] Add correctly encoded query parameters from the RequestBuilder
+- [ ] Port to windows
+- [ ] Set up CI with some tests on Ububtu LTS, Debian Stable, Windows, macos
+- [ ] Add Android to CI
+- [ ] Add IOS to CI
 
 
 ## Further reading
