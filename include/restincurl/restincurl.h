@@ -49,6 +49,8 @@
 #include <string.h>
 #include <sys/select.h>
 #include <sys/time.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #ifdef RESTINCURL_WITH_OPENSSL_THREADS
@@ -1121,6 +1123,12 @@ private:
         }
 
     public:
+        bool CanSendFile() const noexcept {
+            return request_type_ == RequestType::POST
+                    || request_type_ == RequestType::PUT;
+        }
+
+
         /*! 
          * \name Type of request
          * 
@@ -1263,6 +1271,40 @@ private:
          */
         RequestBuilder& ConnectTimeout(const long timeout) {
             connect_timeout_ = timeout;
+            return *this;
+        }
+
+        /*! Send a file
+         *
+         *  \param path Full path to the file to send.
+         *
+         *  \throws SystemException if the file cannot be opened.
+         *  \throws Exception if the method is called for a non-send operation
+         */
+        RequestBuilder& SendFile(const std::string& path) {
+            assert(!is_built_);
+            assert(CanSendFile());
+            if (!CanSendFile()) {
+                throw Exception{"Invalid curl operation for a file upload"};
+            }
+
+            assert(fp_ == nullptr);
+            fp_ = fopen(path.c_str(), "rb");
+            if (!fp_) {
+                const auto e = errno;
+                throw SystemException{std::string{"Unable to open file "} + path, e};
+            }
+
+            struct stat st = {};
+            if(fstat(fileno(fp_), &st) != 0) {
+                const auto e = errno;
+                throw SystemException{std::string{"Unable to stat file "} + path, e};
+            }
+
+            // set where to read from (on Windows you need to use READFUNCTION too)
+            options_->Set(CURLOPT_READDATA, fp_);
+            options_->Set(CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(st.st_size));
+            have_data_out_ = true;
             return *this;
         }
 
@@ -1494,6 +1536,7 @@ private:
         completion_fn_t completion_;
         long request_timeout_ = 10000L; // 10 seconds
         long connect_timeout_ = 3000L; // 1 second
+        FILE *fp_ = {};
 #if RESTINCURL_ENABLE_ASYNC
         Worker& worker_;
 #endif

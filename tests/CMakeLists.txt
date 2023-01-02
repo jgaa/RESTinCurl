@@ -34,6 +34,12 @@ target_link_libraries(app_test
 )
 ADD_AND_RUN_UNITTEST(APP_TEST app_test)
 
+add_executable(upload_test upload_test.cpp)
+add_dependencies(upload_test externalJson externalLog)
+target_link_libraries(upload_test ${DEFAULT_LIBRARIES})
+ADD_AND_RUN_UNITTEST(UPLOAD_TEST upload_test)
+
+
 add_executable(example1 example1.cpp)
 add_dependencies(example1 externalJson externalLog)
 target_link_libraries(example1
