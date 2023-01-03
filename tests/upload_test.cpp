@@ -13,7 +13,7 @@ using namespace restincurl;
 
 /*! Generate a temporary file so we have something to send.
  *
- *  Delete the file inb the destructor
+ *  Delete the file in the destructor
  *
  *  Using C++14, so no std::filesystem...
  *

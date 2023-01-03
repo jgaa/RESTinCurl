@@ -27,6 +27,7 @@ For desktop and server projects, I personally prefer the much more interesting [
 - Implements it's own asynchronous event-loop, and expose only a simple, modern, intuitive API to your code.
 - One instance use only one worker-thread. The thread is started on demand and stopped when the instance has been idle for a while.
 - Tuned towards REST/Json use-cases (but still usable for general/binary HTTP requests).
+- Supports sending files as raw data or MIME attachments.
 
 ## How to use it in your C++ project
 
