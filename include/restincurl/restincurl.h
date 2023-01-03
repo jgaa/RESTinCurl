@@ -275,7 +275,7 @@ private:
         std::string body;
     };
 
-    enum class RequestType { GET, PUT, POST, HEAD, DELETE, PATCH, OPTIONS, INVALID };
+    enum class RequestType { GET, PUT, POST, HEAD, DELETE, PATCH, OPTIONS, POST_MIME, INVALID };
     
     /*! Completion debug_callback
      * 
@@ -478,6 +478,22 @@ private:
             completion_ = std::move(completion);
         }
 
+        void OpenSourceFile(const std::string& path) {
+            assert(!fp_);
+            auto fp = fopen(path.c_str(), "rb");
+            if (!fp) {
+                const auto e = errno;
+                throw SystemException{std::string{"Unable to open file "} + path, e};
+            }
+
+            fp_= std::shared_ptr<FILE>(fp, std::fclose);
+        }
+
+        FILE *GetSourceFp() {
+            assert(fp_);
+            return fp_.get();
+        }
+
         // Synchronous execution.
         void Execute() {
             const auto result = curl_easy_perform(*eh_);
@@ -506,6 +522,32 @@ private:
 
         std::string& getDefaultInBuffer() {
             return default_data_buffer_;
+        }
+
+        void InitMime() {
+            if (!mime_) {
+                mime_ = curl_mime_init(*eh_);
+            }
+        }
+
+        void AddFileAsMimeData(const std::string& path,
+                               const std::string& name,
+                               const std::string& remoteName,
+                               const std::string& mimeType) {
+
+            InitMime();
+            assert(mime_);
+            auto * part = curl_mime_addpart(mime_);
+            curl_mime_filedata(part, path.c_str());
+            curl_mime_name(part, name.empty() ? "file" :name.c_str());
+
+            if (!remoteName.empty()) {
+                curl_mime_filename(part, remoteName.c_str());
+            }
+
+            if (!mimeType.empty()) {
+                curl_mime_type(part, mimeType.c_str());
+            }
         }
 
     private:
@@ -550,6 +592,10 @@ private:
                 case RequestType::DELETE:
                     curl_easy_setopt(*eh_, CURLOPT_CUSTOMREQUEST, "DELETE");
                     break;
+                case RequestType::POST_MIME:
+                    InitMime();
+                    curl_easy_setopt(*eh_, CURLOPT_MIMEPOST, mime_);
+                    break;
                 default:
                     throw Exception("Unsupported request type" + std::to_string(static_cast<int>(request_type_)));
             }
@@ -562,6 +608,8 @@ private:
         std::unique_ptr<DataHandlerBase> default_in_handler_;
         headers_t headers_ = nullptr;
         std::string default_data_buffer_;
+        std::shared_ptr<FILE> fp_;
+        curl_mime *mime_ = {};
     };
 
 #if RESTINCURL_ENABLE_ASYNC
@@ -1156,6 +1204,11 @@ private:
             return Prepare(RequestType::POST, url);
         }
 
+        /*! Use a HTTP POST request */
+        RequestBuilder& PostMime(const std::string& url) {
+            return Prepare(RequestType::POST_MIME, url);
+        }
+
         /*! Use a HTTP PUT request */
         RequestBuilder& Put(const std::string& url) {
             return Prepare(RequestType::PUT, url);
@@ -1288,21 +1341,69 @@ private:
                 throw Exception{"Invalid curl operation for a file upload"};
             }
 
-            assert(fp_ == nullptr);
-            fp_ = fopen(path.c_str(), "rb");
-            if (!fp_) {
-                const auto e = errno;
-                throw SystemException{std::string{"Unable to open file "} + path, e};
-            }
-
+            assert(request_);
+            request_->OpenSourceFile(path);
             struct stat st = {};
-            if(fstat(fileno(fp_), &st) != 0) {
+            if(fstat(fileno(request_->GetSourceFp()), &st) != 0) {
                 const auto e = errno;
                 throw SystemException{std::string{"Unable to stat file "} + path, e};
             }
 
             // set where to read from (on Windows you need to use READFUNCTION too)
-            options_->Set(CURLOPT_READDATA, fp_);
+            options_->Set(CURLOPT_READDATA, request_->GetSourceFp());
+            options_->Set(CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(st.st_size));
+            have_data_out_ = true;
+            return *this;
+        }
+
+        /*! Send a file as a multipart/form mime segment
+         *
+         *  \param path Full path to the file tro send
+         *  \param name Otional name to use for the file in the mime segment
+         *  \param remoteName Optional name to label the file as
+         *         for the remote end
+         *  \param mimeType Optional mime-type for the file
+         *
+         *  \throws Exception if the method is called for a
+         *          non-mime-post operation
+         */
+        RequestBuilder& SendFileAsMimeData(const std::string& path,
+                               const std::string& name = {},
+                               const std::string& remoteName = {},
+                               const std::string& mimeType = {}) {
+            assert(request_);
+            assert(request_type_ == RequestType::POST_MIME);
+            if (request_type_ != RequestType::POST_MIME) {
+                throw Exception{"Must use PostMime operation to add mime attachments"};
+            }
+            request_->AddFileAsMimeData(path, name, remoteName, mimeType);
+            return *this;
+        }
+
+        /*! Send a file
+         *
+         *  \param path Full path to the file to send.
+         *
+         *  \throws SystemException if the file cannot be opened.
+         *  \throws Exception if the method is called for a non-send operation
+         */
+        RequestBuilder& SendFileAsForm(const std::string& path) {
+            assert(!is_built_);
+            assert(CanSendFile());
+            if (!CanSendFile()) {
+                throw Exception{"Invalid curl operation for a file upload"};
+            }
+
+            assert(request_);
+            request_->OpenSourceFile(path);
+            struct stat st = {};
+            if(fstat(fileno(request_->GetSourceFp()), &st) != 0) {
+                const auto e = errno;
+                throw SystemException{std::string{"Unable to stat file "} + path, e};
+            }
+
+            // set where to read from (on Windows you need to use READFUNCTION too)
+            options_->Set(CURLOPT_READDATA, request_->GetSourceFp());
             options_->Set(CURLOPT_INFILESIZE_LARGE, static_cast<curl_off_t>(st.st_size));
             have_data_out_ = true;
             return *this;
@@ -1536,7 +1637,6 @@ private:
         completion_fn_t completion_;
         long request_timeout_ = 10000L; // 10 seconds
         long connect_timeout_ = 3000L; // 1 second
-        FILE *fp_ = {};
 #if RESTINCURL_ENABLE_ASYNC
         Worker& worker_;
 #endif
