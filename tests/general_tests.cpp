@@ -4,9 +4,12 @@
 #define RESTINCURL_LOG_VERBOSE_ENABLE 1
 
 #include <future>
+#include <fstream>
 
 #define RESTINCURL_IDLE_TIMEOUT_SEC 1
 #include "restincurl/restincurl.h"
+
+#include "TmpFile.h"
 
 #include "lest/lest.hpp"
 
@@ -24,7 +27,6 @@ using namespace restincurl;
 
 
 const lest::test specification[] = {
-
 
 STARTCASE(TestSimpleGet)
 {
@@ -345,6 +347,115 @@ STARTCASE(TestThread)
 
 #endif
 } ENDCASE
+
+
+STARTCASE(TestUploadRawOk)
+{
+    TmpFile tmpfile;
+    restincurl::Client client;
+    bool callback_called = false;
+
+    // Send directly as a raw data-stream
+    client.Build()->Post("http://localhost:3001/upload_raw/")
+        .Header("X-Client", "restincurl")
+        .Header("Content-Type", "application/octet-stream")
+        .Header("X-Origin-File-Name", tmpfile.Name())
+        .WithCompletion([&](const Result& result) {
+            EXPECT(result.curl_code == CURLE_OK);
+            callback_called = true;
+        })
+        .SendFile(tmpfile.Name())
+        .Execute();
+
+#if RESTINCURL_ENABLE_ASYNC
+    client.CloseWhenFinished();
+    client.WaitForFinish();
+#endif
+    EXPECT(callback_called);
+} ENDCASE
+
+STARTCASE(TestUploadRawNoFile)
+{
+    restincurl::Client client;
+    bool callback_called = false;
+
+    const std::string nofile = "/no-file/12345/if-this-exists-blame-yourself";
+
+
+    // Send directly as a raw data-stream
+    EXPECT_THROWS_AS(
+    client.Build()->Post("http://localhost:3001/upload_raw/")
+        .Header("X-Client", "restincurl")
+        .Header("Content-Type", "application/octet-stream")
+        .Header("X-Origin-File-Name", nofile)
+        .WithCompletion([&](const Result& result) {
+            EXPECT(result.curl_code == CURLE_OK);
+            callback_called = true;
+        })
+        .SendFile(nofile)
+        .Execute();
+    , SystemException);
+
+#if RESTINCURL_ENABLE_ASYNC
+    client.CloseWhenFinished();
+    client.WaitForFinish();
+#endif
+    EXPECT(!callback_called);
+} ENDCASE
+
+STARTCASE(TestUploadMimeOk)
+{
+    TmpFile tmpfile;
+    restincurl::Client client;
+    bool callback_called = false;
+
+    // Send directly as a raw data-stream
+    client.Build()->PostMime("http://localhost:3001/upload_raw/")
+        .Header("X-Client", "restincurl")
+        .Header("Content-Type", "application/octet-stream")
+        .Header("X-Origin-File-Name", tmpfile.Name())
+        .WithCompletion([&](const Result& result) {
+            EXPECT(result.curl_code == CURLE_OK);
+            callback_called = true;
+        })
+        .SendFileAsMimeData(tmpfile.Name(), "My-File", "MyFile.txt", "text/plain")
+        .Execute();
+
+#if RESTINCURL_ENABLE_ASYNC
+    client.CloseWhenFinished();
+    client.WaitForFinish();
+#endif
+    EXPECT(callback_called);
+} ENDCASE
+
+STARTCASE(TestUploadMimeNoFile)
+{
+    restincurl::Client client;
+    bool callback_called = false;
+
+    const std::string nofile = "/no-file/12345/if-this-exists-blame-yourself";
+
+
+    // Send directly as a raw data-stream
+
+    client.Build()->PostMime("http://localhost:3001/upload_raw/")
+        .Header("X-Client", "restincurl")
+        .Header("Content-Type", "application/octet-stream")
+        .Header("X-Origin-File-Name", nofile)
+        .WithCompletion([&](const Result& result) {
+            EXPECT(result.curl_code != CURLE_OK);
+            callback_called = true;
+        })
+        .SendFileAsMimeData(nofile, "My-File", "MyFile.txt", "text/plain")
+        .Execute();
+
+#if RESTINCURL_ENABLE_ASYNC
+    client.CloseWhenFinished();
+    client.WaitForFinish();
+#endif
+    EXPECT(callback_called);
+} ENDCASE
+
 
 }; //lest
 

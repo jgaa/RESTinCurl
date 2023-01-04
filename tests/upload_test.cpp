@@ -5,38 +5,12 @@
 //#define RESTINCURL_USE_SYSLOG 0
 #define RESTINCURL_ENABLE_DEFAULT_LOGGER 1
 
-#include <fstream>
 #include "restincurl/restincurl.h"
+
+#include "TmpFile.h"
 
 using namespace std;
 using namespace restincurl;
-
-/*! Generate a temporary file so we have something to send.
- *
- *  Delete the file in the destructor
- *
- *  Using C++14, so no std::filesystem...
- *
- */
-struct TmpFile {
-    TmpFile() {
-        ofstream file(name_);
-        for(int i = 0; i < 1000; i++) {
-            file << "This is line #" << i << endl;
-        }
-    }
-
-    ~TmpFile() {
-        unlink(name_.c_str());
-    }
-
-    string Name() {
-        return name_;
-    }
-
-private:
-    string name_ = tmpnam(nullptr);
-;};
 
 int main( int argc, char * argv[]) {
 
