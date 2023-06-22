@@ -1,0 +1,9 @@
+{
+  "name": "restincurl",
+  "version-string": "0.3.0",
+  "license": "MIT",
+  "dependencies": [
+    "curl"
+  ],
+  "builtin-baseline":"b8d272a463101415ab4f57545c4e1a1d2c24aafe"
+}
