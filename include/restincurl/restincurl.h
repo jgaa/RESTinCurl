@@ -48,11 +48,9 @@
 #include <curl/easy.h>
 #include <fcntl.h>
 #include <string.h>
-#include <sys/select.h>
-#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <unistd.h>
+//#include <unistd.h>
 
 #ifdef RESTINCURL_WITH_OPENSSL_THREADS
 #   include <openssl/crypto.h>
@@ -276,7 +274,7 @@ private:
         std::string body;
     };
 
-    enum class RequestType { GET, PUT, POST, HEAD, DELETE, PATCH, OPTIONS, POST_MIME, INVALID };
+    enum class RequestType { GET, PUT, POST, HEAD, NOT_WIN32_MACRO_DELETE, PATCH, OPTIONS, POST_MIME, INVALID };
     
     /*! Completion debug_callback
      * 
@@ -590,7 +588,7 @@ private:
                     headers_ = curl_slist_append(headers_, "Transfer-Encoding: chunked");
                     curl_easy_setopt(*eh_, CURLOPT_CUSTOMREQUEST, "PATCH");
                     break;
-                case RequestType::DELETE:
+                case RequestType::NOT_WIN32_MACRO_DELETE:
                     curl_easy_setopt(*eh_, CURLOPT_CUSTOMREQUEST, "DELETE");
                     break;
                 case RequestType::POST_MIME:
@@ -1142,7 +1140,7 @@ private:
 
         /*! Use a HTTP DELETE request */
         RequestBuilder& Delete(const std::string& url) {
-            return Prepare(RequestType::DELETE, url);
+            return Prepare(RequestType::NOT_WIN32_MACRO_DELETE, url);
         }
 
         /*! Use a HTTP OPTIONS request */

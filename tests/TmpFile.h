@@ -1,7 +1,9 @@
 #pragma once
 
 #include <sys/types.h>
-#include <unistd.h>
+#ifndef WIN32
+#  include <unistd.h>
+#endif
 
 
 #include <fstream>
