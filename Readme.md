@@ -12,12 +12,12 @@ For desktop and server projects, I personally prefer the much more interesting [
 - IO must be asynchronous, allowing any realistic numbers of REST requests from a single worker thread.
 - We must be able to shut down immediately, killing the worker thread at any time and cleaning up.
 - The library must use resources in a sane way, and silently shut down the worker thread and curl connection pool when it has been idle for a while.
-- Utilize C++14 to keep simple things simple.
+- Utilize C++17 to keep simple things simple.
 
 ## Features
 
 - Very simple to use. You don't need to understand the inner workings of libcurl to use RESTinCurl!
-- Limited use of C++ templates to keep the binary size down. The library is geared towards mobile/IOT use-cases.
+- Limited use of C++ templates to keep the binary size down. The library is geared towards mobile/IOT use-cases, but it can be (and are) used in other applications, including sophisticated server software.
 - Supports all standard HTTP request types.
 - Supports synchronous and asynchronous requests (using the same API).
 - Exposes a request-builder class to make it dead simple to express requests.
@@ -42,7 +42,7 @@ is to include the header-file.
 
 ## External dependencies
 
-- the C++14 standard library
+- the C++17 standard library
 - libcurl
 
 ## How it works
@@ -179,7 +179,7 @@ to see how that can be done. Hint: It's simple.
 - [ ] CloseWhenFinished() must allow new requests to enter the queue and to be completed
 - [ ] Verify that DELETE is implemented correctly.
 - [ ] Add correctly encoded query parameters from the RequestBuilder
-- [ ] Port to windows
+- [x] Port to windows
 - [ ] Set up CI with some tests on Ububtu LTS, Debian Stable, Windows, macos
 - [ ] Add Android to CI
 - [ ] Add IOS to CI
