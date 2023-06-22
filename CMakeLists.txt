@@ -11,7 +11,7 @@ endif()
 
 macro(SET_CPP_STANDARD target)
     message(STATUS "Using C++ 17 for ${target}")
-    set_property(TARGET ${target} PROPERTY CXX_STANDARD 14)
+    set_property(TARGET ${target} PROPERTY CXX_STANDARD 17)
 endmacro(SET_CPP_STANDARD)
 
 find_package(Threads REQUIRED)
