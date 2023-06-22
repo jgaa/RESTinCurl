@@ -3,7 +3,7 @@
 /*
     MIT License
 
-    Copyright (c) 2018 Jarle Aase
+    Copyright (c) 2018 - 2023 Jarle Aase
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to deal
@@ -26,8 +26,9 @@
     On Github: https://github.com/jgaa/RESTinCurl
 */
 
-/*! \file */ 
+/*! \file */
 
+#include <array>
 #include <algorithm>
 #include <atomic>
 #include <deque>
@@ -613,56 +614,6 @@ private:
     };
 
 #if RESTINCURL_ENABLE_ASYNC
-
-    class Signaler {
-        enum FdUsage { FD_READ = 0, FD_WRITE = 1};
-
-    public:
-        using pipefd_t = std::array<int, 2>;
-
-        Signaler() {
-            auto status = pipe(pipefd_.data());
-            if (status) {
-                throw SystemException("pipe", status);
-            }
-            for(auto fd : pipefd_) {
-                int flags = 0;
-                if (-1 == (flags = fcntl(fd, F_GETFL, 0)))
-                    flags = 0;
-                fcntl(fd, F_SETFL, flags | O_NONBLOCK);
-            }
-        }
-
-        ~Signaler() {
-            for(auto fd : pipefd_) {
-                close(fd);
-            }
-        }
-
-        void Signal() {
-            char byte = {};
-            RESTINCURL_LOG_TRACE("Signal: Signaling!");
-            if (write(pipefd_[FD_WRITE], &byte, 1) != 1) {
-                throw SystemException("write pipe", errno);
-            }
-        }
-
-        int GetReadFd() { return pipefd_[FD_READ]; }
-
-        bool WasSignalled() {
-            bool rval = false;
-            char byte = {};
-            while(read(pipefd_[FD_READ], &byte, 1) > 0) {
-                RESTINCURL_LOG_TRACE("Signal: Was signalled");
-                rval = true;
-            }
-
-            return rval;
-        }
-
-    private:
-        pipefd_t pipefd_;
-    };
     
     /*! Thread support for the TLS layer used by libcurl.
      * 
@@ -813,9 +764,11 @@ private:
 
         void Enqueue(Request::ptr_t req) {
             RESTINCURL_LOG_TRACE("Queuing request ");
-            lock_t lock(mutex_);
-            PrepareThread();
-            queue_.push_back(std::move(req));
+            {
+                lock_t lock(mutex_);
+                PrepareThread();
+                queue_.push_back(std::move(req));
+            }
             Signal();
         }
 
@@ -873,7 +826,12 @@ private:
 
     private:
         void Signal() {
-            signal_.Signal();
+            //signal_.Signal();
+            {
+                lock_t lock(mutex_);
+                signaled_ = true;
+            }
+            curl_multi_wakeup(handle_);
         }
 
         void Dequeue() {
@@ -950,9 +908,6 @@ private:
 
         void Run() {
             int transfers_running = -1;
-            fd_set fdread = {};
-            fd_set fdwrite = {};
-            fd_set fdexcep = {};
             bool do_dequeue = true;
             auto timeout = GetNextTimeout();
 
@@ -1017,54 +972,20 @@ private:
                 auto next_timeout = std::chrono::duration_cast<std::chrono::milliseconds>(
                     timeout - std::chrono::steady_clock::now());
                 long sleep_duration = std::max<long>(1, next_timeout.count());
-                /* extract sleep_duration value */
 
-
-                FD_ZERO(&fdread);
-                FD_ZERO(&fdwrite);
-                FD_ZERO(&fdexcep);
-
-                int maxfd = -1;
-                if (transfers_running > 0) {
-                    curl_multi_timeout(handle_, &sleep_duration);
-                    if (sleep_duration < 0) {
-                        sleep_duration = 1000;
-                    }
-
-                    /* get file descriptors from the transfers */
-                    const auto mc = curl_multi_fdset(handle_, &fdread, &fdwrite, &fdexcep, &maxfd);
-                    RESTINCURL_LOG_TRACE("maxfd: " << maxfd);
-                    if (mc != CURLM_OK) {
-                        throw CurlException("curl_multi_fdset", mc);
-                    }
-
-                    if (maxfd == -1) {
-                        // Curl want's us to revisit soon
-                        sleep_duration = 50;
-                    }
-                } // active transfers
-
-                struct timeval tv = {};
-                tv.tv_sec = sleep_duration / 1000;
-                tv.tv_usec = (sleep_duration % 1000) * 1000;
-
-                const auto signalfd = signal_.GetReadFd();
-
-                RESTINCURL_LOG_TRACE("Calling select() with timeout of "
+                RESTINCURL_LOG_TRACE("Calling curl_multi_poll() with timeout of "
                     << sleep_duration
                     << " ms. Next timeout in " << next_timeout.count() << " ms. "
                     << transfers_running << " active transfers.");
 
-                FD_SET(signalfd, &fdread);
-                maxfd = std::max(signalfd,  maxfd) + 1;
-
-                const auto rval = select(maxfd, &fdread, &fdwrite, &fdexcep, &tv);
-                RESTINCURL_LOG_TRACE("select(" << maxfd << ") returned: " << rval);
-
-                if (rval > 0) {
-                    if (FD_ISSET(signalfd, &fdread)) {
-                        RESTINCURL_LOG_TRACE("FD_ISSET was true: ");
-                        do_dequeue = signal_.WasSignalled();
+                int numfds = {};
+                const auto mc = curl_multi_poll(handle_, {}, 0, sleep_duration, &numfds);
+                RESTINCURL_LOG_TRACE("curl_multi_poll(transfers_running=" << transfers_running << ") returned: " << mc);
+                {
+                    lock_t lock(mutex_);
+                    if (signaled_) {
+                        do_dequeue = signaled_;
+                        signaled_ = false;
                     }
 
                 }
@@ -1089,7 +1010,7 @@ private:
         std::shared_ptr<WorkerThread> thread_;
         std::deque<Request::ptr_t> queue_;
         std::map<EasyHandle::handle_t, Request::ptr_t> ongoing_;
-        Signaler signal_;
+        bool signaled_ = false;
     };
 #endif // RESTINCURL_ENABLE_ASYNC
 
