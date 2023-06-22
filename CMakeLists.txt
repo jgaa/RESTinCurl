@@ -10,7 +10,7 @@ if (NOT DEFINED WITH_APIDOC)
 endif()
 
 macro(SET_CPP_STANDARD target)
-    message(STATUS "Using C++ 14 for ${target}")
+    message(STATUS "Using C++ 17 for ${target}")
     set_property(TARGET ${target} PROPERTY CXX_STANDARD 14)
 endmacro(SET_CPP_STANDARD)
 
