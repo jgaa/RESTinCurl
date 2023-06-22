@@ -14,11 +14,12 @@ macro(SET_CPP_STANDARD target)
     set_property(TARGET ${target} PROPERTY CXX_STANDARD 14)
 endmacro(SET_CPP_STANDARD)
 
+find_package(Threads REQUIRED)
 find_package(CURL REQUIRED)
 
 message(STATUS "Curl library: ${CURL_LIBRARIES}")
 
-set(DEFAULT_LIBRARIES ${CURL_LIBRARIES} pthread)
+set(DEFAULT_LIBRARIES ${CURL_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT})
 
 include_directories(
     ${CURL_INCLUDE_DIRS}
