@@ -6,6 +6,12 @@
 #include "restincurl/restincurl.h"
 #include "nlohmann/json.hpp"
 
+#if defined(WIN32) && defined(ERROR)
+// Microsoft's baby-compiler cannot resist the temptation to pollute the global name-space with defines...
+#   undef ERROR
+#endif // baby-compiler
+
+
 using namespace std;
 using namespace restincurl;
 using namespace logfault;
