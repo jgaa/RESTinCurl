@@ -17,6 +17,7 @@ For desktop and server projects, I personally prefer the much more interesting [
 ## Features
 
 - Very simple to use. You don't need to understand the inner workings of libcurl to use RESTinCurl!
+- Supports C++20 coroutines (generic and asio).
 - Limited use of C++ templates to keep the binary size down. The library is geared towards mobile/IOT use-cases.
 - Supports all standard HTTP request types.
 - Supports synchronous and asynchronous requests (using the same API).
