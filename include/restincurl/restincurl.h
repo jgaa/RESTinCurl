@@ -3,7 +3,7 @@
 /*
     MIT License
 
-    Copyright (c) 2018 Jarle Aase
+    Copyright (c) 2018 - 2025 Jarle Aase
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to deal
@@ -26,6 +26,8 @@
     On Github: https://github.com/jgaa/RESTinCurl
 */
 
+
+
 /*! \file */ 
 
 #include <algorithm>
@@ -41,6 +43,20 @@
 #include <string>
 #include <thread>
 #include <vector>
+
+#if __cplusplus >= 202002L
+#   include <coroutine>
+#   include <optional>
+using thread_t = std::jthread;
+#else
+using thread_t = std::thread;
+#endif
+
+#ifdef RESTINCURL_ENABLE_ASIO
+#include <boost/asio.hpp>
+#include <boost/asio/use_awaitable.hpp>
+#endif
+
 
 #include <assert.h>
 #include <curl/curl.h>
@@ -196,43 +212,40 @@
 
 namespace restincurl {
 
-#if defined(RESTINCURL_USE_SYSLOG) || defined(RESTINCURL_USE_ANDROID_NDK_LOG)
-    enum class LogLevel { DEBUG };
+#ifdef RESTINCURL_ENABLE_ASIO
+template<typename CompletionToken, typename RequestBuilder, typename Result>
+auto async_execute(RequestBuilder builder, CompletionToken&& token)
+{
+    // The signature we want for the completion handler:
+    using sig = void(std::exception_ptr, Result);
 
-    class Log {
-    public:
-        Log(const LogLevel level) : level_{level} {}
-        ~Log() {
-#   ifdef RESTINCURL_USE_SYSLOG
-            static const std::array<int, 1> syslog_priority = { LOG_DEBUG };
-            static std::once_flag syslog_opened;
-            std::call_once(syslog_opened, [] {
-                openlog(nullptr, 0, LOG_USER);
-            });
-#   endif
-#   ifdef RESTINCURL_USE_ANDROID_NDK_LOG
-            static const std::array<int, 1> android_priority = { ANDROID_LOG_DEBUG };
-#   endif
-            const auto msg = out_.str();
-
-#   ifdef RESTINCURL_USE_SYSLOG
-            syslog(syslog_priority.at(static_cast<int>(level_)), "%s", msg.c_str());
-#   endif
-#   ifdef RESTINCURL_USE_ANDROID_NDK_LOG
-            __android_log_write(android_priority.at(static_cast<int>(level_)),
-                                "restincurl", msg.c_str());
-#   endif
-        }
-
-        std::ostringstream& Line() { return out_; }
-
-private:
-        const LogLevel level_;
-        std::ostringstream out_;
-    };
+    return boost::asio::async_initiate<CompletionToken, sig>(
+        // This lambda kicks off the operation and holds the handler
+        [b = std::move(builder)](auto&& handler) mutable {
+            // We need to capture the handler and post back on its executor
+            auto h = std::decay_t<decltype(handler)>(handler);
+            b.WithCompletion(
+                 [h](const Result& r) mutable {
+                     // No error, so exception_ptr is null
+                     boost::asio::post(
+                         boost::asio::get_associated_executor(h),
+                         [h, r]() mutable { h(nullptr, r); }
+                         );
+                 }
+                 )
+                .WithError(
+                    [h](std::exception_ptr ex) mutable {
+                        boost::asio::post(
+                            boost::asio::get_associated_executor(h),
+                            [h, ex]() mutable { h(ex, {}); }
+                            );
+                    }
+                    )
+                .Execute();
+        },
+        token);
+}
 #endif
-
-
 
     using lock_t = std::lock_guard<std::mutex>;
 
@@ -764,10 +777,10 @@ private:
                 return thread_.joinable();
             }
 
-            operator std::thread& () { return thread_; }
+            operator thread_t& () { return thread_; }
 
         private:
-            std::thread thread_;
+            thread_t thread_;
             mutable std::once_flag joined_;
         };
 
@@ -1154,9 +1167,14 @@ private:
         : request_{std::make_unique<Request>()}
         , options_{std::make_unique<class Options>(request_->GetEasyHandle())}
 #if RESTINCURL_ENABLE_ASYNC
-        , worker_(worker)
+        , worker_(&worker)
 #endif
         {}
+
+        RequestBuilder(const RequestBuilder&) = delete;
+        RequestBuilder(RequestBuilder&&) = default;
+        RequestBuilder& operator=(const RequestBuilder&) = delete;
+        RequestBuilder& operator=(RequestBuilder&&) = default;
 
         ~RequestBuilder() {
         }
@@ -1508,6 +1526,10 @@ private:
             return *this;
         }
 
+        bool HaveCompletion() const noexcept {
+            return static_cast<bool>(completion_);
+        }
+
         /*! HTTP Basic Authentication
          *
          * Authenticate the request with HTTP Basic Authentication.
@@ -1622,9 +1644,192 @@ private:
          */
         void Execute() {
             Build();
-            worker_.Enqueue(std::move(request_));
+            assert(worker_);
+            worker_->Enqueue(std::move(request_));
         }
-#endif
+
+#if __cplusplus >= 202002L
+        /**
+         * @brief Coroutine-compatible awaitable execute.
+         *
+         * Returns an awaitable object that you can `co_await` inside a C++20 coroutine.
+         * When you `co_await` it, the request is enqueued on the RESTinCurl worker thread,
+         * your coroutine is suspended, and then resumed once the HTTP operation completes.
+         *
+         * Example usage:
+         * @code
+         * auto result = co_await client.Build()
+         *                         ->Get("https://example.com")
+         *                         .Option(CURLOPT_FOLLOWLOCATION, 1L)
+         *                         .CoExecute();
+         * @endcode
+         *
+         * @note This overload only participates on rvalues (temporaries).
+         *       If you have a named RequestBuilder, use the `&` overload below or
+         *       simply call `std::move(builder).CoExecute()`.
+         *
+         * @returns An awaiter type with:
+         *   - await_ready() == false
+         *   - await_suspend(): enqueues the request and stores the coroutine handle
+         *   - await_resume(): returns the completed Result
+         *
+         * @throws Any exceptions thrown by the underlying builder setup (e.g. invalid options)
+         *         will be propagated immediately; network-level errors should be surfaced
+         *         via the Result object in your completion callback.
+         */
+        auto CoExecute() && {
+
+            assert(!HaveCompletion());
+            if (HaveCompletion()) {
+                throw Exception{"Cannot use CoExecute with a completion callback"};
+            }
+
+            struct Awaiter {
+                RequestBuilder  builder_;
+                std::optional<Result> result_;
+                std::coroutine_handle<> handle_;
+
+                explicit Awaiter(RequestBuilder&& b)
+                    : builder_(std::move(b))
+                {}
+
+                bool await_ready() const noexcept {
+                    // always suspend, kick off async work in await_suspend
+                    return false;
+                }
+
+                void await_suspend(std::coroutine_handle<> h) noexcept {
+                    handle_ = h;
+                    // install our callback, then Execute() to start
+                    builder_.WithCompletion(
+                                [this](const Result& r) {
+                                    result_ = r;
+                                    handle_.resume();
+                                }
+                                ).Execute();
+                }
+
+                Result await_resume() noexcept {
+                    // at this point result_ must be engaged
+                    return *result_;
+                }
+            };
+
+            return Awaiter{std::move(*this)};
+        }
+
+        /**
+         * @brief Lvalue overload forwarding to the rvalue `CoExecute()`.
+         *
+         * Allows you to write:
+         * @code
+         * RequestBuilder rb = client.Build()->Get("…");
+         * auto result = co_await rb.CoExecute();
+         * @endcode
+         *
+         * @see CoExecute()&&
+         */
+        auto CoExecute() & {
+            return std::move(*this).CoExecute();
+        }
+
+#ifdef RESTINCURL_ENABLE_ASIO
+        /**
+         * @brief Asio‐compatible async execute.
+         *
+         * Initiates the HTTP request on RESTinCurl’s worker thread and returns
+         * an Asio asynchronous operation that can be used with any Asio completion
+         * token (e.g. `boost::asio::use_future`, `boost::asio::yield_context`, or
+         * `boost::asio::use_awaitable`).
+         *
+         * When used with `boost::asio::use_awaitable`, you can write:
+         * @code
+         * auto result = co_await client.Build()
+         *                     ->Get("https://example.com")
+         *                     .Option(CURLOPT_FOLLOWLOCATION, 1L)
+         *                     .AsioAsyncExecute(boost::asio::use_awaitable);
+         * @endcode
+         *
+         * @tparam CompletionToken
+         *   The type of Asio completion token to control how the result is delivered.
+         *   Common choices:
+         *     - `boost::asio::use_future`   → returns `std::future<Result>`
+         *     - `boost::asio::yield_context`→ for stackful Asio coroutines
+         *     - `boost::asio::use_awaitable`→ returns `boost::asio::awaitable<Result>`
+         *
+         * @param token
+         *   An instance of the desired completion token.
+         *
+         * @returns
+         *   An object suitable for passing to `co_await` (when using `use_awaitable`)
+         *   or for use with traditional Asio asynchronous patterns.
+         *
+         * @note
+         *   - This overload only participates on **rvalues** (temporaries).
+         *   - Errors from the HTTP request are propagated through the Asio
+         *     completion mechanism (e.g. as exceptions in the returned future,
+         *     or as an `error_code` argument in a handler).
+         */
+        template<typename CompletionToken>
+        auto AsioAsyncExecute(CompletionToken&& token) && {
+            namespace asio = boost::asio;
+            using Signature = void(Result);
+
+            assert(!HaveCompletion());
+            if (HaveCompletion()) {
+                throw Exception{"Cannot use CoExecute with a completion callback"};
+            }
+
+            return asio::async_initiate<CompletionToken, Signature>(
+                // initiation lambda: takes ownership of *this* builder
+                [builder = std::move(*this)]
+                (auto&& handler) mutable
+                {
+                    // Handler is move-only (e.g. awaitable_handler), so we
+                    // wrap it in a shared_ptr so we can capture it multiple
+                    // times in our callbacks.
+                    using HandlerType = std::decay_t<decltype(handler)>;
+                    auto ph = std::make_shared<HandlerType>(std::forward<decltype(handler)>(handler));
+
+                    // Install the completion callback
+                    builder
+                        .WithCompletion(
+                            [ph](Result r) mutable {
+                                // Post back onto the original executor
+                                boost::asio::post(
+                                    asio::get_associated_executor(*ph),
+                                    [ph, r = std::move(r)]() mutable {
+                                        // invoke the handler with the Result
+                                        (*ph)(r);
+                                    }
+                                    );
+                            }
+                            )
+                        .Execute();
+                },
+                std::forward<CompletionToken>(token)
+                );
+        }
+
+        /**
+         * @brief Lvalue overload forwarding to the rvalue `AsioAsyncExecute()`.
+         *
+         * Allows calling `.AsioAsyncExecute()` on named `RequestBuilder` objects without
+         * requiring manual `std::move` at the call site.
+         *
+         * @tparam CompletionToken  See rvalue overload.
+         * @param token             See rvalue overload.
+         * @returns                 See rvalue overload.
+         * @see AsioAsyncExecute()&&
+         */
+        template<typename CompletionToken>
+        auto AsioAsyncExecute(CompletionToken&& token) & {
+            return std::move(*this)
+            .AsioAsyncExecute(std::forward<CompletionToken>(token));
+        }
+#endif // RESTINCURL_ENABLE_ASIO
+#endif // C++20
+#endif // RESTINCURL_ENABLE_ASYNC
 
     private:
         std::unique_ptr<Request> request_;
@@ -1638,7 +1843,7 @@ private:
         long request_timeout_ = 10000L; // 10 seconds
         long connect_timeout_ = 3000L; // 1 second
 #if RESTINCURL_ENABLE_ASYNC
-        Worker& worker_;
+        Worker *worker_{};
 #endif
     };
 

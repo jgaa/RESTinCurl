@@ -86,6 +86,82 @@ return immediately, and do any time-consuming processing in another thread.
 Since all IO happens in the worker-thread, no data synchronization should normally be required, 
 leading to better performance and simpler code. 
 
+Add a new “## Coroutines” section right after the existing examples. Here’s one possible insertion (you can adjust placement as you like):
+
+## Coroutines
+
+If you’re using C++20 coroutines, RESTinCurl gives you two ready-to-use awaitable APIs:
+
+### 1. `CoExecute()` – Plain C++20 awaitable
+
+```cpp
+#define RESTINCURL_ENABLE_ASYNC 1
+#include "restincurl/restincurl.h"
+
+auto my_coroutine() -> std::coroutine_handle<void> { /* ... */ }
+
+auto foo = [&]() -> cppcoro::task<void> {
+    // Build a request and co_await it directly:
+    restincurl::Result r = co_await client.Build()
+        ->Get("https://example.com/resource")
+        .Option(CURLOPT_FOLLOWLOCATION, 1L)
+        .CoExecute();  // your generic awaitable
+
+    std::cout << "HTTP status: " << r.http_response_code
+              << ", body size: "  << r.body.size() << "\n";
+    co_return;
+};
+```
+
+* **`CoExecute()`** returns an *awaiter* that:
+
+  * *always* suspends the coroutine,
+  * enqueues the request on the RESTinCurl worker thread,
+  * resumes when the HTTP response arrives,
+  * and returns the completed `Result` from `await_resume()`.
+* There’s an lvalue overload too, so you can write:
+
+```cpp
+  auto rb = client.Build()->Get("…");
+  Result r = co_await rb.CoExecute();
+```
+
+### 2. `AsioAsyncExecute()` – Boost.Asio-compatible
+
+If you’re already using Boost.Asio, you can integrate RESTinCurl directly into your io\_context:
+
+```cpp
+#define RESTINCURL_ENABLE_ASIO 1
+#define RESTINCURL_ENABLE_ASYNC 1
+
+#include <boost/asio.hpp>
+#include "restincurl/restincurl.h"
+
+boost::asio::io_context ctx;
+auto fut = boost::asio::co_spawn(ctx, [&]() -> boost::asio::awaitable<void> {
+    restincurl::Result r = co_await client.Build()
+        ->Get("https://example.com/resource")
+        .Option(CURLOPT_FOLLOWLOCATION, 1L)
+        .AsioAsyncExecute(boost::asio::use_awaitable);
+
+    std::cout << "HTTP status: " << r.http_response_code
+              << ", body size: "  << r.body.size() << "\n";
+    co_return;
+}, boost::asio::use_future);
+
+ctx.run();
+fut.get();
+```
+
+* **`AsioAsyncExecute(token)`** is a member‐template that calls `boost::asio::async_initiate` under the hood.
+* You can pass any Asio completion token:
+
+  * `boost::asio::use_future` → `std::future<Result>`
+  * `boost::asio::yield_context` → stackful coroutine
+  * `boost::asio::use_awaitable` → `boost::asio::awaitable<Result>`
+
+With these two options you can choose **plain** or **Asio-integrated** coroutines—and enjoy fully asynchronous REST calls without boilerplate.
+
 ## Example from a real app
 
 Here is a method called when a user click on a button in an IOS or Android app using this library.
@@ -132,9 +208,10 @@ The code above use the [logfault](https://github.com/jgaa/logfault) C++ header o
 
 ## More examples
 
-Here is a [test-app](tests/app_test.cpp), doing one request from main()
-
-The [test-cases](tests/general_tests.cpp) shows most of the features in use.
+- Here is a [test-app](tests/app_test.cpp), doing one request from main()
+- The [test-cases](tests/general_tests.cpp) shows most of the features in use.
+- C++20 [general coroutine example](tests/coro-unifex/coro-unifex.cpp) shows how to use restincurl with the unifex coroutine library.
+- C++20 [asio coroutine example](tests/coro-asio/coro-asio.cpp) shows how to use restincurl with any Boost.Asio coroutines.
 
 ## Logging
 
@@ -166,23 +243,6 @@ RESTinCurl use two macros, `RESTINCURL_LOG(...)` and `RESTINCURL_LOG_TRACE(...)`
 content. If you use another log library, or your own logging functions, you can define those two
 macros to fit your needs. You can examine the code for the default implementation in `restincurl.h`
 to see how that can be done. Hint: It's simple. 
-
-## Todo's
-- [x] Ensure thread safety with OpenSSL
-- [ ] Validate OpenSSL therad safety
-- [x] Make some sort of timer, so that we clean up and stop the thread after #time
-- [x] Make sure connection re-use it utilized
-- [x] Queue new requests if we reach RESTINCURL_MAX_CONNECTIONS concurrent connections
-- [x] Write complete documentation
-- [x] Write tutorial
-- [x] Test cases for non-async mode (RESTINCURL_ENABLE_ASYNC=0)
-- [ ] CloseWhenFinished() must allow new requests to enter the queue and to be completed
-- [ ] Verify that DELETE is implemented correctly.
-- [ ] Add correctly encoded query parameters from the RequestBuilder
-- [ ] Port to windows
-- [ ] Set up CI with some tests on Ububtu LTS, Debian Stable, Windows, macos
-- [ ] Add Android to CI
-- [ ] Add IOS to CI
 
 
 ## Further reading

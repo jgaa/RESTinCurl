@@ -1,7 +1,9 @@
-cmake_minimum_required(VERSION 3.2 FATAL_ERROR)
-project(restincurl VERSION 0.2 LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
+project(restincurl VERSION 0.5 LANGUAGES CXX)
 
 include(cmake_scripts/external-projects.cmake)
+
+option(RESTINCURL_BUILD_TESTS "Build tests" OFF)
 
 message(STATUS "Using ${CMAKE_CXX_COMPILER}")
 
@@ -9,10 +11,9 @@ if (NOT DEFINED WITH_APIDOC)
     option(WITH_APIDOC "Generate Doxygen documentation")
 endif()
 
-macro(SET_CPP_STANDARD target)
-    message(STATUS "Using C++ 14 for ${target}")
-    set_property(TARGET ${target} PROPERTY CXX_STANDARD 14)
-endmacro(SET_CPP_STANDARD)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(CURL REQUIRED)
 
@@ -27,7 +28,11 @@ include_directories(
 
 link_directories( ${CURL_LIBRARIES} )
 
-enable_testing()
-add_subdirectory(tests)
+if(RESTINCURL_BUILD_TESTS)
+    #find_package(GTest REQUIRED)
+    include(CTest)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
 
 include(cmake_scripts/doxygen.cmake)

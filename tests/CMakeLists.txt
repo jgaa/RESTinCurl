@@ -1,7 +1,7 @@
 
 macro (ADD_AND_RUN_UNITTEST testname targetname)
-SET_CPP_STANDARD(${targetname})
 add_test(NAME ${testname} COMMAND ${targetname})
+set_property(TARGET ${target} PROPERTY CXX_STANDARD 20)
 if (AUTORUN_UNIT_TESTS)
     add_custom_command(
         TARGET ${targetname}
@@ -13,6 +13,8 @@ if (AUTORUN_UNIT_TESTS)
 endif()
 endmacro()
 
+add_subdirectory(coro-asio)
+add_subdirectory(coro-unifex)
 
 add_executable(general_tests general_tests.cpp)
 target_link_libraries(general_tests
