@@ -43,6 +43,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <array>
 
 #if __cplusplus >= 202002L
 #   include <coroutine>
