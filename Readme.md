@@ -41,6 +41,36 @@ The project have a `CMakeLists.txt`. This used to build and run the tests
 with cmake . It's not required in order to use the library. All yo need to do
 is to include the header-file.
 
+### CMake Integration
+
+If you're using CMake, RESTinCurl provides a modern CMake target for easy integration:
+
+#### Using FetchContent (Recommended)
+
+```cmake
+include(FetchContent)
+FetchContent_Declare(
+  RESTinCurl
+  GIT_REPOSITORY https://github.com/jgaa/RESTinCurl.git
+  GIT_TAG main  # or a specific version tag
+)
+FetchContent_MakeAvailable(RESTinCurl)
+
+target_link_libraries(your_target RESTinCurl::RESTinCurl)
+```
+
+#### Using add_subdirectory
+
+```cmake
+add_subdirectory(path/to/RESTinCurl)
+target_link_libraries(your_target RESTinCurl::RESTinCurl)
+```
+
+The `RESTinCurl::RESTinCurl` target automatically handles:
+- Include directories
+- Required dependencies (libcurl, pthread)
+- C++14 standard requirement
+
 ## External dependencies
 
 - the C++14 standard library
