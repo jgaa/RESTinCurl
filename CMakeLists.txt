@@ -21,6 +21,29 @@ message(STATUS "Curl library: ${CURL_LIBRARIES}")
 
 set(DEFAULT_LIBRARIES ${CURL_LIBRARIES} pthread)
 
+# Create the main library target (header-only INTERFACE library)
+add_library(restincurl INTERFACE)
+
+# Set include directories for the target
+target_include_directories(restincurl INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+    ${CURL_INCLUDE_DIRS}
+)
+
+# Link required libraries
+target_link_libraries(restincurl INTERFACE
+    ${CURL_LIBRARIES}
+    pthread
+)
+
+# Create the namespaced alias for easy consumption
+add_library(RESTinCurl::RESTinCurl ALIAS restincurl)
+
+# Set CXX standard requirement
+target_compile_features(restincurl INTERFACE cxx_std_14)
+
+# Legacy support for existing tests
 include_directories(
     ${CURL_INCLUDE_DIRS}
     ${CMAKE_SOURCE_DIR}/include
