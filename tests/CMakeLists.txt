@@ -90,3 +90,7 @@ target_link_libraries(example7
     ${DEFAULT_LIBRARIES}
 )
 ADD_AND_RUN_UNITTEST(EXAMPLE7 example7)
+
+add_executable(target_test target_test.cpp)
+target_link_libraries(target_test RESTinCurl::RESTinCurl)
+ADD_AND_RUN_UNITTEST(TARGET_TEST target_test)
