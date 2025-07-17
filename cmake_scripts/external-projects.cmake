@@ -4,6 +4,8 @@ set(EXTERNAL_PROJECTS_INSTALL_PREFIX ${EXTERNAL_PROJECTS_PREFIX}/installed)
 
 include(ExternalProject)
 
+if (RESTINCURL_BUILD_TESTS)
+
 ExternalProject_Add(
     externalLest
     PREFIX "${EXTERNAL_PROJECTS_PREFIX}"
@@ -15,7 +17,7 @@ ExternalProject_Add(
     LOG_DOWNLOAD ON
     LOG_INSTALL ON
     )
-    
+
 ExternalProject_Add(
     externalJson
     PREFIX "${EXTERNAL_PROJECTS_PREFIX}"
@@ -45,3 +47,4 @@ include_directories(
      ${EXTERNAL_PROJECTS_PREFIX}/src/externalJson/include/
      ${EXTERNAL_PROJECTS_PREFIX}/src/externalLog/include/
     )
+endif() # RESTINCURL_BUILD_TESTS

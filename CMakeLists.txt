@@ -1,9 +1,8 @@
 cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 project(restincurl VERSION 0.5 LANGUAGES CXX)
 
-include(cmake_scripts/external-projects.cmake)
-
 option(RESTINCURL_BUILD_TESTS "Build tests" OFF)
+include(cmake_scripts/external-projects.cmake)
 
 message(STATUS "Using ${CMAKE_CXX_COMPILER}")
 
