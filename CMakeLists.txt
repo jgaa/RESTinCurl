@@ -1,24 +1,18 @@
-cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.13...3.30 FATAL_ERROR)
 project(restincurl VERSION 0.5 LANGUAGES CXX)
 
+
 option(RESTINCURL_BUILD_TESTS "Build tests" OFF)
+option(RESTINCURL_WITH_APIDOC "Generate Doxygen documentation" OFF)
+
 include(cmake_scripts/external-projects.cmake)
 
 message(STATUS "Using ${CMAKE_CXX_COMPILER}")
 
-if (NOT DEFINED WITH_APIDOC)
-    option(WITH_APIDOC "Generate Doxygen documentation")
-endif()
-
-set(CMAKE_CXX_STANDARD 14)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-
+find_package(Threads REQUIRED)
 find_package(CURL REQUIRED)
 
 message(STATUS "Curl library: ${CURL_LIBRARIES}")
-
-set(DEFAULT_LIBRARIES ${CURL_LIBRARIES} pthread)
 
 # Create the main library target (header-only INTERFACE library)
 add_library(restincurl INTERFACE)
@@ -32,23 +26,39 @@ target_include_directories(restincurl INTERFACE
 
 # Link required libraries
 target_link_libraries(restincurl INTERFACE
-    ${CURL_LIBRARIES}
-    pthread
+    CURL::libcurl
+    Threads::Threads
 )
 
 # Create the namespaced alias for easy consumption
 add_library(RESTinCurl::RESTinCurl ALIAS restincurl)
 
-# Set CXX standard requirement
-target_compile_features(restincurl INTERFACE cxx_std_14)
+include(CheckCXXSourceCompiles)
 
-# Legacy support for existing tests
-include_directories(
-    ${CURL_INCLUDE_DIRS}
-    ${CMAKE_SOURCE_DIR}/include
-    )
+# A little snippet that errors-out if __cplusplus < 201402L
+set(CXX14_TEST_SOURCE [=[
+  #if __cplusplus < 201402L
+  # error "C++14 or newer is required"
+  #endif
+  int main() { return 0; }
+]=])
 
-link_directories( ${CURL_LIBRARIES} )
+check_cxx_source_compiles("${CXX14_TEST_SOURCE}" CXX_SUPPORTS_CPP14)
+
+if(NOT CXX_SUPPORTS_CPP14)
+    # Set CXX standard requirement
+    target_compile_features(restincurl INTERFACE cxx_std_14)
+    set(CMAKE_CXX_STANDARD 14)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    unset(CXX_SUPPORTS_CPP14)
+
+    check_cxx_source_compiles("${CXX14_TEST_SOURCE}" CXX_SUPPORTS_CPP14_2)
+    if(NOT CXX_SUPPORTS_CPP14_2)
+        message(FATAL_ERROR
+            "Your compiler does not support C++14 (i.e. __cplusplus < 201402L).\n"
+            "Please pass a -std=c++14 (or newer) flag, or use a newer compiler.")
+    endif()
+endif()
 
 if(RESTINCURL_BUILD_TESTS)
     #find_package(GTest REQUIRED)
@@ -57,4 +67,29 @@ if(RESTINCURL_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
 
-include(cmake_scripts/doxygen.cmake)
+if(RESTINCURL_WITH_APIDOC)
+  include(cmake_scripts/doxygen.cmake)
+endif()
+
+install(TARGETS restincurl
+  EXPORT restincurlTargets
+  INCLUDES DESTINATION include
+)
+install(DIRECTORY include/ DESTINATION include)
+install(EXPORT restincurlTargets
+  NAMESPACE RESTinCurl::
+  DESTINATION lib/cmake/restincurl
+)
+
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file(
+  "${CMAKE_CURRENT_BINARY_DIR}/restincurlConfigVersion.cmake"
+  VERSION ${PROJECT_VERSION}
+  COMPATIBILITY AnyNewerVersion
+)
+install(
+  FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/restincurlConfigVersion.cmake"
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake_scripts/restincurlConfig.cmake"  # if you provide one
+  DESTINATION lib/cmake/restincurl
+)

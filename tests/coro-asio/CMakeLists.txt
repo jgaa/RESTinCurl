@@ -11,9 +11,7 @@ find_package(Boost 1.75 REQUIRED COMPONENTS
     system)
 
 add_executable(coro-asio coro-asio.cpp)
-target_link_libraries(coro-asio
-    ${DEFAULT_LIBRARIES}
-)
-add_dependencies(coro-asio externalLest)
+target_link_libraries(coro-asio PRIVATE RESTinCurl::RESTinCurl)
+
 ADD_AND_RUN_UNITTEST(GENERAL_TESTS coro-asio)
 

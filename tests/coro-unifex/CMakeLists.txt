@@ -34,7 +34,7 @@ add_executable(coro-unifex coro-unifex.cpp)
 # 5) Link against the INTERFACE target "unifex"
 target_link_libraries(coro-unifex
   PRIVATE
-    ${DEFAULT_LIBRARIES}
+    RESTinCurl::RESTinCurl
     unifex
 )
 
