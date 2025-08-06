@@ -1,5 +1,4 @@
 
-// We don't use asynchronous IO in this program, so no need to add the code for that.
 #define RESTINCURL_ENABLE_ASYNC 1
 #define RESTINCURL_ENABLE_ASIO 1
 
