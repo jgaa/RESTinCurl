@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.05...3.30 FATAL_ERROR)
-project(restincurl VERSION 0.5 LANGUAGES CXX)
+project(restincurl VERSION 0.6 LANGUAGES CXX)
 
 
 option(RESTINCURL_BUILD_TESTS "Build tests" OFF)
