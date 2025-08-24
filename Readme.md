@@ -1,49 +1,45 @@
-# REST in Curl - Modern C++ header only library wrapper around libcurl
+# REST in Curl – Modern C++ Header-Only Library Wrapper Around libcurl
 
-C++ is fun. Boost::asio is lots of fun. Unfortunately, in some projects, they cannot be used without introducing great pain. That's why we need 
-the [*RESTinCurl*](https://github.com/jgaa/RESTinCurl) library.
-For desktop and server projects, I personally prefer the much more interesting [restc-cpp](https://github.com/jgaa/restc-cpp) project.
+C++ is fun. Boost::asio is lots of fun. Unfortunately, in some projects, they cannot be used without introducing great pain. That's why we need the [*RESTinCurl*](https://github.com/jgaa/RESTinCurl) library.
+For desktop and server projects, I personally prefer the more feature-rich [restc-cpp](https://github.com/jgaa/restc-cpp) project.
 
-*RESTinCurl* is a very simple library that use the C library libcurl to perform HTTP client operations on web servers. It's targeting REST api's using HTTP and (probably) json. Restincurl does not provide json by itself. In my own projects, I use the excellent [nlohmann/json](https://github.com/nlohmann/json) header only library.
+*RESTinCurl* is a very simple library that uses the C library libcurl to perform HTTP client operations on web servers. It targets REST APIs over HTTP and (probably) JSON. RESTinCurl does not provide JSON support by itself. In my own projects, I use the excellent [nlohmann/json](https://github.com/nlohmann/json) header-only library.
 
 ## Design Goals
 
-- We use libcurl to keep the code size and dependencies at a minimum (for mobile and IOT). No boost library dependencies.
-- IO must be asynchronous, allowing any realistic numbers of REST requests from a single worker thread.
-- We must be able to shut down immediately, killing the worker thread at any time and cleaning up.
-- The library must use resources in a sane way, and silently shut down the worker thread and curl connection pool when it has been idle for a while.
-- Utilize C++14 to keep simple things simple.
+* Use libcurl to keep code size and dependencies at a minimum (for mobile and IoT). No Boost library dependencies.
+* IO must be asynchronous, allowing realistic numbers of REST requests from a single worker thread.
+* Support immediate shutdown, killing the worker thread at any time and cleaning up.
+* Use resources responsibly, and silently shut down the worker thread and curl connection pool when idle.
+* Utilize C++14 to keep simple things simple.
 
 ## Features
 
-- Very simple to use. You don't need to understand the inner workings of libcurl to use RESTinCurl!
-- Supports C++20 coroutines (generic and asio).
-- Limited use of C++ templates to keep the binary size down. The library is geared towards mobile/IOT use-cases.
-- Supports all standard HTTP request types.
-- Supports synchronous and asynchronous requests (using the same API).
-- Exposes a request-builder class to make it dead simple to express requests.
-- Flexible logging.
-- Hides libcurl's awkward data callbacks and let's you work with std::string's in stead (if you want to).
-- Exposes all libcurl's options to you, via convenience methods, or directly.
-- Implements it's own asynchronous event-loop, and expose only a simple, modern, intuitive API to your code.
-- One instance use only one worker-thread. The thread is started on demand and stopped when the instance has been idle for a while.
-- Tuned towards REST/Json use-cases (but still usable for general/binary HTTP requests).
-- Supports sending files as raw data or MIME attachments.
+* Very simple to use. You don't need to understand libcurl’s internals to use RESTinCurl.
+* Supports C++20 coroutines (generic and Asio).
+* Limited use of C++ templates to keep binary size down (geared toward mobile/IoT use cases).
+* Supports all standard HTTP request types.
+* Supports synchronous and asynchronous requests (with the same API).
+* Provides a request-builder class to make requests easy to express.
+* Flexible logging.
+* Hides libcurl's awkward data callbacks and lets you work with `std::string` instead (if you want to).
+* Exposes all libcurl options to you via convenience methods or directly.
+* Implements its own asynchronous event loop, exposing only a simple, modern, intuitive API to your code.
+* One instance uses only one worker thread. The thread starts on demand and stops when the instance has been idle for a while.
+* Tuned toward REST/JSON use cases (but still usable for general/binary HTTP requests).
+* Supports sending files as raw data or MIME attachments.
 
-## How to use it in your C++ project
+## How to Use It in Your C++ Project
 
-You can add it to you project as a git sub-module, download it as part of your
-projects build (from CMake or whatever magic you use), or you can just
-download the header and copy it to your project (if you copy it, you should
-pay attention to new releases in case there are any security fixes).
+You can add it to your project as a Git submodule, download it as part of your project’s build (via CMake or whatever you prefer), or simply copy the header file into your project.
+If you copy it manually, make sure to check for new releases in case of security fixes.
 
-The project have a `CMakeLists.txt`. This used to build and run the tests
-with cmake . It's not required in order to use the library. All yo need to do
-is to include the header-file.
+The project provides a `CMakeLists.txt` file. This is mainly for building and running the tests with CMake; it is not required to use the library.
+All you need to do is include the header file.
 
 ### CMake Integration
 
-If you're using CMake, RESTinCurl provides a modern CMake target for easy integration:
+If you're using CMake, RESTinCurl provides a modern CMake target for easy integration.
 
 #### Using FetchContent (Recommended)
 
@@ -59,7 +55,7 @@ FetchContent_MakeAvailable(RESTinCurl)
 target_link_libraries(your_target RESTinCurl::RESTinCurl)
 ```
 
-#### Using add_subdirectory
+#### Using add\_subdirectory
 
 ```cmake
 add_subdirectory(path/to/RESTinCurl)
@@ -67,61 +63,56 @@ target_link_libraries(your_target RESTinCurl::RESTinCurl)
 ```
 
 The `RESTinCurl::RESTinCurl` target automatically handles:
-- Include directories
-- Required dependencies (libcurl, pthread)
-- C++14 standard requirement
 
-## External dependencies
+* Include directories
+* Required dependencies (libcurl, pthread)
+* C++14 standard requirement
 
-- the C++14 standard library
-- libcurl
+## External Dependencies
 
-## How it works
+* C++14 standard library
+* libcurl
+
+## How It Works
 
 Using *RESTinCurl* is simple.
-
-You build a query, and provide a functor that gets called when the request finish (or fail).
+You build a query and provide a functor that gets called when the request finishes (or fails).
 
 Example:
 
-```C++
+```cpp
 restincurl::Client client;
 client.Build()->Get("https://api.example.com/")
     .WithCompletion([](const restincurl::Result& result) {
        std::clog << "It works!" << std::endl;
     })
     .Execute();
-
 ```
 
 ## Data
 
-*RESTinCurl* is a very thin wrapper over libcurl. Libcurl reads and writes payload data from / to
-C callback functions while serving a request. That gives a lot of flexibility, but it's a bit awkward
-to implement. RESTinCurl gives you full flexibility in that you can use the C API for this, by providing
-your own callback functions, you can use a C++ template abstraction that reads/writes to a container, 
-or you can simply use std::string buffers. For json payloads, strings are perfect, and RESTinCurl 
-provides a very simple and intuitive interface. 
+*RESTinCurl* is a very thin wrapper over libcurl. Libcurl reads and writes payload data from/to C callback functions while serving a request.
+That provides a lot of flexibility, but it’s a bit awkward to implement. RESTinCurl gives you full flexibility:
 
-## Threading model
+* Use the C API with your own callback functions.
+* Use a C++ template abstraction to read/write to a container.
+* Or simply use `std::string` buffers.
 
-In asynchronous mode (the default mode of operation), each instance of a Client class will
-start one worker-thread that will deal with all concurrent requests performed by that
-instance. The worker-thread is started when the first request is made, and it will be
-terminated after a configurable timeout-period when the client is idle. 
+For JSON payloads, strings are ideal, and RESTinCurl provides a simple and intuitive interface.
 
-Asynchronous requests returns immediately, and an (optional) callback will be called when the 
-request finish (or fails). The callback is called from the worker-thread. In the callback you should
-return immediately, and do any time-consuming processing in another thread. 
+## Threading Model
 
-Since all IO happens in the worker-thread, no data synchronization should normally be required, 
-leading to better performance and simpler code. 
+In asynchronous mode (the default), each instance of a `Client` class will start one worker thread to handle all concurrent requests.
+The worker thread starts with the first request and stops after a configurable timeout when idle.
 
-Add a new “## Coroutines” section right after the existing examples. Here’s one possible insertion (you can adjust placement as you like):
+Asynchronous requests return immediately, and an (optional) callback is invoked when the request finishes (or fails).
+The callback is executed in the worker thread. You should return quickly from it and perform any heavy processing in another thread.
+
+Since all IO happens in the worker thread, no data synchronization is usually required, resulting in better performance and simpler code.
 
 ## Coroutines
 
-If you’re using C++20 coroutines, RESTinCurl gives you two ready-to-use awaitable APIs:
+If you’re using C++20 coroutines, RESTinCurl provides two ready-to-use awaitable APIs:
 
 ### 1. `CoExecute()` – Plain C++20 awaitable
 
@@ -129,14 +120,12 @@ If you’re using C++20 coroutines, RESTinCurl gives you two ready-to-use awaita
 #define RESTINCURL_ENABLE_ASYNC 1
 #include "restincurl/restincurl.h"
 
-auto my_coroutine() -> std::coroutine_handle<void> { /* ... */ }
-
 auto foo = [&]() -> cppcoro::task<void> {
     // Build a request and co_await it directly:
     restincurl::Result r = co_await client.Build()
         ->Get("https://example.com/resource")
         .Option(CURLOPT_FOLLOWLOCATION, 1L)
-        .CoExecute();  // your generic awaitable
+        .CoExecute();  // generic awaitable
 
     std::cout << "HTTP status: " << r.http_response_code
               << ", body size: "  << r.body.size() << "\n";
@@ -144,13 +133,14 @@ auto foo = [&]() -> cppcoro::task<void> {
 };
 ```
 
-* **`CoExecute()`** returns an *awaiter* that:
+* **`CoExecute()`** returns an awaiter that:
 
-  * *always* suspends the coroutine,
+  * always suspends the coroutine,
   * enqueues the request on the RESTinCurl worker thread,
   * resumes when the HTTP response arrives,
   * and returns the completed `Result` from `await_resume()`.
-* There’s an lvalue overload too, so you can write:
+
+* There’s also an lvalue overload, so you can write:
 
 ```cpp
   auto rb = client.Build()->Get("…");
@@ -159,7 +149,7 @@ auto foo = [&]() -> cppcoro::task<void> {
 
 ### 2. `AsioAsyncExecute()` – Boost.Asio-compatible
 
-If you’re already using Boost.Asio, you can integrate RESTinCurl directly into your io\_context:
+If you’re already using Boost.Asio, you can integrate RESTinCurl directly into your `io_context`:
 
 ```cpp
 #define RESTINCURL_ENABLE_ASIO 1
@@ -184,98 +174,91 @@ ctx.run();
 fut.get();
 ```
 
-* **`AsioAsyncExecute(token)`** is a member‐template that calls `boost::asio::async_initiate` under the hood.
+* **`AsioAsyncExecute(token)`** is a member template that calls `boost::asio::async_initiate` internally.
 * You can pass any Asio completion token:
 
   * `boost::asio::use_future` → `std::future<Result>`
   * `boost::asio::yield_context` → stackful coroutine
   * `boost::asio::use_awaitable` → `boost::asio::awaitable<Result>`
 
-With these two options you can choose **plain** or **Asio-integrated** coroutines—and enjoy fully asynchronous REST calls without boilerplate.
+With these two options you can choose **plain C++20 coroutines** or **Asio-integrated coroutines** — and enjoy fully asynchronous REST calls without boilerplate.
 
-## Example from a real app
+## Example from a Real App
 
-Here is a method called when a user click on a button in an IOS or Android app using this library.
-It's called from the UI thread and returns immediately. The lambda function body is called from 
-a worker-thread.
+Here is a method called when a user clicks a button in an iOS or Android app using this library.
+It is called from the UI thread and returns immediately. The lambda function body runs in a worker thread:
 
-```C++
+```cpp
 void AccountImpl::getBalance(IAccount::balance_callback_t callback) const {
-        curl_.Build()->Get(getServerUrl())
-            .BasicAuthentication(getHttpAuthName(), getHttpAuthPasswd())
-            .Trace(APP_CURL_VERBOSE)
-            .Option(CURLOPT_SSL_VERIFYPEER, 0L)
-            .AcceptJson()
-            .WithCompletion([this, callback](const restincurl::Result& result) {
-                if (result.curl_code == 0 && result.http_response_code == 200) {
-                    LFLOG_IFALL_DEBUG("Fetched balance: " << result.body);
-                    if (callback) {
-                        LFLOG_IFALL_DEBUG("Calling callback");
-                        callback(result.body, {});
-                        LFLOG_IFALL_DEBUG("Callback was called OK");
-                    } else {
-                        LFLOG_ERROR << "No callback to call";
-                    }
+    curl_.Build()->Get(getServerUrl())
+        .BasicAuthentication(getHttpAuthName(), getHttpAuthPasswd())
+        .Trace(APP_CURL_VERBOSE)
+        .Option(CURLOPT_SSL_VERIFYPEER, 0L)
+        .AcceptJson()
+        .WithCompletion([this, callback](const restincurl::Result& result) {
+            if (result.curl_code == 0 && result.http_response_code == 200) {
+                LFLOG_IFALL_DEBUG("Fetched balance: " << result.body);
+                if (callback) {
+                    LFLOG_IFALL_DEBUG("Calling callback");
+                    callback(result.body, {});
+                    LFLOG_IFALL_DEBUG("Callback was called OK");
                 } else {
-                    // Failed.
-                    LFLOG_ERROR << "Failed to fetch balance. http code: " << result.http_response_code
-                        << ", error reason: " << result.msg
-                        << ", payload: " << result.body;
-                    if (callback) {
-                        LFLOG_IFALL_DEBUG("Calling callback");
-                        callback({}, assign(result, result.body));
-                        LFLOG_IFALL_DEBUG("Callback was called OK");
-                    } else {
-                        LFLOG_ERROR << "No callback to call";
-                    }
-                    return;
+                    LFLOG_ERROR << "No callback to call";
                 }
-            })
-            .Execute();
-    }
+            } else {
+                // Failed.
+                LFLOG_ERROR << "Failed to fetch balance. HTTP code: "
+                            << result.http_response_code
+                            << ", error reason: " << result.msg
+                            << ", payload: " << result.body;
+                if (callback) {
+                    LFLOG_IFALL_DEBUG("Calling callback");
+                    callback({}, assign(result, result.body));
+                    LFLOG_IFALL_DEBUG("Callback was called OK");
+                } else {
+                    LFLOG_ERROR << "No callback to call";
+                }
+                return;
+            }
+        })
+        .Execute();
+}
 ```
 
-The code above use the [logfault](https://github.com/jgaa/logfault) C++ header only log-library.
+The code above uses the [logfault](https://github.com/jgaa/logfault) C++ header-only logging library.
 
-## More examples
+## More Examples
 
-- Here is a [test-app](tests/app_test.cpp), doing one request from main()
-- The [test-cases](tests/general_tests.cpp) shows most of the features in use.
-- C++20 [general coroutine example](tests/coro-unifex/coro-unifex.cpp) shows how to use restincurl with the unifex coroutine library.
-- C++20 [asio coroutine example](tests/coro-asio/coro-asio.cpp) shows how to use restincurl with any Boost.Asio coroutines.
+* A [test app](tests/app_test.cpp), making one request from `main()`.
+* The [test cases](tests/general_tests.cpp) demonstrate most features.
+* C++20 [general coroutine example](tests/coro-unifex/coro-unifex.cpp) shows how to use RESTinCurl with the Unifex coroutine library.
+* C++20 [Asio coroutine example](tests/coro-asio/coro-asio.cpp) shows how to use RESTinCurl with Boost.Asio coroutines.
 
 ## Logging
 
-Logging is essential for debugging applications. For normal applications, you can normally
-get away with logging to standard output or standard error. On mobile, things are little more
-involved. Android has it's own weird logging library for NDK projects, and IOS has it's own 
-logging methods that are not even exposed to C++! 
+Logging is essential for debugging applications. For normal applications, you can usually log to standard output or error.
+On mobile, things are a little more involved: Android has its own logging API for NDK projects, and iOS has its own logging methods that are not exposed to C++.
 
-RESTinCurl has a very simple logging feature that can write logs to std::clog, syslog or 
-Android's `__android_log_write()`. It may be all you need to debug your REST requests. 
+RESTinCurl has a very simple logging feature that can write logs to `std::clog`, syslog, or Android's `__android_log_write()`. It may be all you need to debug your REST requests.
 
 Just `#define RESTINCURL_ENABLE_DEFAULT_LOGGER 1` to enable it.
 
-If you want to use the Android NDK logger, also `#define RESTINCURL_USE_ANDROID_NDK_LOG`. 
+If you want to use the Android NDK logger, also define `RESTINCURL_USE_ANDROID_NDK_LOG`.
+If you want to use syslog, define `RESTINCURL_USE_SYSLOG`.
 
-If you want to use syslog, also `#define RESTINCURL_USE_SYSLOG`.
+### Logfault
 
+If you want full support for log files, iOS/macOS logging, Android, syslog, etc., you can use the [logfault](https://github.com/jgaa/logfault) C++ header-only logging library, and
+`#include "logfault/logfault.h"` before `#include "restincurl/restincurl.h"`.
+RESTinCurl will detect logfault automatically and adapt.
 
-**Logfault**
+### Other Log Libraries
 
-If you want full support for log files, IOS/Macos logging, Android, Syslog etc, you can 
-get the [logfault](https://github.com/jgaa/logfault) C++ header only log-library, and 
-`#include "logfault/logfault.h"` before you `#include "restincurl/restincurl.h"`. 
-RESTinCurl will detect that you use logfault and adapt automatically. 
+RESTinCurl uses two macros — `RESTINCURL_LOG(...)` and `RESTINCURL_LOG_TRACE(...)` — to generate log output.
+If you use another logging library, or your own logging functions, you can redefine these macros to fit your needs.
+You can check the default implementation in `restincurl.h` to see how it works. (Hint: it’s simple.)
 
-**Other log libraries**
+## Further Reading
 
-RESTinCurl use two macros, `RESTINCURL_LOG(...)` and `RESTINCURL_LOG_TRACE(...)` to generate log
-content. If you use another log library, or your own logging functions, you can define those two
-macros to fit your needs. You can examine the code for the default implementation in `restincurl.h`
-to see how that can be done. Hint: It's simple. 
+* The [tutorial](https://github.com/jgaa/RESTinCurl/blob/master/doc/tutorial.md)
 
-
-## Further reading
-
-- You may want to look at the [tutorial](https://github.com/jgaa/RESTinCurl/blob/master/doc/tutorial.md)
